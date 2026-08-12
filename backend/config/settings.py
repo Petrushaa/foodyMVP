@@ -291,6 +291,11 @@ CELERY_BEAT_SCHEDULE = {
         'task': 'posts.tasks.recalculate_menu_item_ratings',
         'schedule': float(get_env_time_interval('RATING_RECALC_INTERVAL', '6h')),
     },
+    # Справочник заведений наш, значит и чистить дубли в нём нам.
+    'find-restaurant-duplicates': {
+        'task': 'posts.tasks.find_restaurant_duplicates',
+        'schedule': float(get_env_time_interval('DUPLICATE_SCAN_INTERVAL', '24h')),
+    },
 }
 
 # Logging

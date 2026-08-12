@@ -26,8 +26,11 @@ class ModerationViewSet(viewsets.ReadOnlyModelViewSet):
 
     def get_queryset(self):
         queryset = Post.objects.filter(status=Post.STATUS_PENDING).select_related(
-            'user', 'menu_item', 'menu_item__restaurant', 'draft_dish_type',
-        ).prefetch_related('images', 'tags', 'draft_taxons').order_by('created_at')
+            'user', 'menu_item', 'menu_item__restaurant', 'draft_dish_type', 'draft_restaurant',
+        ).prefetch_related('images', 'tags', 'draft_taxons').order_by(
+            # Подозрительные — наверх: их разбор дороже всего откладывать.
+            '-possible_duplicate', '-looks_suspicious', 'created_at',
+        )
 
         # Фильтры очереди: разбирать однотипное подряд заметно быстрее.
         kind = self.request.query_params.get('kind')
@@ -37,6 +40,9 @@ class ModerationViewSet(viewsets.ReadOnlyModelViewSet):
             queryset = queryset.filter(menu_item__isnull=False)
         elif kind == 'price_changes':
             queryset = queryset.filter(proposed_price_status=Post.PRICE_PROPOSAL_PENDING)
+        elif kind == 'suspicious':
+            # Сервер уже отметил, на что смотреть в первую очередь.
+            queryset = queryset.filter(Q(possible_duplicate=True) | Q(looks_suspicious=True))
         return queryset
 
     @action(detail=False, methods=['get'])
@@ -53,6 +59,9 @@ class ModerationViewSet(viewsets.ReadOnlyModelViewSet):
                 proposed_price_status=Post.PRICE_PROPOSAL_PENDING
             ).count(),
             'waiting_over_day': pending.filter(created_at__lt=day_ago).count(),
+            'suspicious': pending.filter(
+                Q(possible_duplicate=True) | Q(looks_suspicious=True)
+            ).count(),
         })
 
     @action(detail=True, methods=['post'])

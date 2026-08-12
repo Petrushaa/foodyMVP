@@ -3,13 +3,15 @@
 
 Устройство коротко (подробности — docs/backend-v2-plan.md):
 
-- Заведение (`Restaurant`) — точка на карте. Якорь — наш внутренний id; название, адрес
-  и координаты подтверждены пользователем и потому наши, храним бессрочно.
+- Заведение (`Restaurant`) — название и адрес вводит пользователь, справочник целиком наш.
+  Уникальность — «город + название + адрес» в нормализованном виде.
 - Позиция (`MenuItem`) — конкретное блюдо в конкретном заведении, к ней привязаны все посты
   про него, её рейтинг и текущая цена.
 - Пост (`Post`) — рассказ про позицию с оценкой автора. До одобрения модератором позиция
   и заведение в каталоге не создаются, поэтому пост несёт «заявку на размещение».
-- Удаление везде мягкое: записи остаются в базе с пометкой, из выдачи пропадают.
+- Удаление постов и комментариев мягкое: записи остаются, из выдачи пропадают.
+  Дубли заведений и позиций, наоборот, удаляются по-настоящему — их содержимое
+  переезжает к выжившему, а написание остаётся синонимом.
 """
 
 import re
@@ -50,6 +52,58 @@ def normalize_name(value):
     text = value.strip().lower().replace('ё', 'е')
     text = _PUNCTUATION_RE.sub(' ', text)
     return _WHITESPACE_RE.sub(' ', text).strip()
+
+
+# Сокращения в адресах. Люди пишут одно и то же десятком способов, и без
+# приведения к единому виду «ул. Пушкина, д. 10» и «улица Пушкина 10» станут
+# двумя разными заведениями.
+_ADDRESS_ABBREVIATIONS = {
+    'ул': 'улица', 'уллица': 'улица',
+    'пр': 'проспект', 'просп': 'проспект', 'прт': 'проспект', 'пркт': 'проспект',
+    'пер': 'переулок', 'пл': 'площадь', 'наб': 'набережная',
+    'бул': 'бульвар', 'бр': 'бульвар', 'ш': 'шоссе', 'мкр': 'микрорайон',
+    'мкрн': 'микрорайон', 'пос': 'посёлок', 'д': 'дом', 'вл': 'владение',
+    'к': 'корпус', 'корп': 'корпус', 'стр': 'строение', 'с': 'строение',
+    'литер': 'литера', 'лит': 'литера',
+}
+
+# Сокращения с дефисом раскрываем до общей нормализации: иначе знаки препинания
+# срежутся раньше, «пр-т» распадётся на «пр» и «т», и в адресе останется мусор.
+_HYPHENATED_ABBREVIATIONS = [
+    (re.compile(r'\bпр[\s-]*кт\b', re.IGNORECASE), 'проспект'),
+    (re.compile(r'\bпр[\s-]*т\b', re.IGNORECASE), 'проспект'),
+    (re.compile(r'\bб[\s-]*р\b', re.IGNORECASE), 'бульвар'),
+    (re.compile(r'\bм[\s-]*н\b', re.IGNORECASE), 'микрорайон'),
+    (re.compile(r'\bш[\s-]*се\b', re.IGNORECASE), 'шоссе'),
+]
+
+# Слова, которые в адресе ничего не различают: «дом 10» и «10» — один адрес.
+#
+# «Улица» здесь же, и это важно: её опускают постоянно — «Пушкина 10» и
+# «ул. Пушкина, д. 10» это одно место. А вот «проспект», «переулок» и прочие
+# типы люди пишут, и отбрасывать их нельзя: «улица Ленина» и «проспект Ленина»
+# в одном городе — разные адреса, и склеить их было бы хуже, чем оставить дубль.
+_ADDRESS_NOISE = {'дом', 'здание', 'улица'}
+
+
+def normalize_address(value):
+    """
+    Приводит адрес к сравнимому виду: раскрывает сокращения, убирает служебные
+    слова и сортирует части, чтобы порядок слов не создавал дубли.
+
+    «ул. Пушкина, д. 10», «улица Пушкина 10» и «Пушкина, 10» → «10 пушкина».
+    """
+    if not value:
+        return ''
+    for pattern, replacement in _HYPHENATED_ABBREVIATIONS:
+        value = pattern.sub(replacement, value)
+    words = []
+    for word in normalize_name(value).split():
+        word = _ADDRESS_ABBREVIATIONS.get(word, word)
+        if word not in _ADDRESS_NOISE:
+            words.append(word)
+    # Сортировка убирает влияние порядка: «Пушкина 10» и «10 Пушкина» — одно и то же.
+    return ' '.join(sorted(words))
 
 
 # ---------------------------------------------------------------------------
@@ -211,31 +265,46 @@ class Brand(models.Model):
 
 class Restaurant(models.Model):
     """
-    Точка на карте.
+    Заведение. Целиком наши данные: название и адрес вводит пользователь.
 
-    Якорь всех связей — внутренний id этой записи.
+    Якорь всех связей — внутренний id. Уникальность — тройка «город + название +
+    адрес» в нормализованном виде: пятьдесят «Шоколадниц» с разными адресами
+    останутся разными заведениями, а «ул. Пушкина, д. 10» и «Пушкина 10» схлопнутся
+    в одно.
 
-    Название, адрес и координаты — **данные, подтверждённые пользователем**: он выбрал
-    заведение из подсказок или поставил точку на карте. Такие данные наши, храним
-    бессрочно и ничего не обновляем в фоне. Обогащать карточку (часы работы, телефон,
-    фото) можно только силами пользователей — тянуть это из Яндекса нельзя.
+    Заведение считается подтверждённым, когда о нём написали **двое разных людей**.
+    Неподтверждённые не попадают в публичный каталог и стоят ниже в подсказках —
+    так выдуманное место не всплывает, даже если модератор его проглядел.
     """
 
+    SOURCE_USER = 'user'
     SOURCE_YANDEX = 'yandex'
-    SOURCE_MANUAL = 'manual'
     SOURCE_CHOICES = [
+        (SOURCE_USER, 'Добавлено пользователем'),
         (SOURCE_YANDEX, 'Яндекс.Карты'),
-        (SOURCE_MANUAL, 'Добавлено вручную'),
     ]
 
+    # Сколько разных людей должны написать про заведение, чтобы оно считалось
+    # настоящим и попало в публичный каталог.
+    CONFIRMATIONS_REQUIRED = 2
+
     source = models.CharField(
-        max_length=16, choices=SOURCE_CHOICES, default=SOURCE_YANDEX, verbose_name='Источник данных'
+        max_length=16, choices=SOURCE_CHOICES, default=SOURCE_USER, verbose_name='Источник'
     )
-    external_id = models.CharField(max_length=64, verbose_name='Идентификатор в источнике')
+    # Заполняется, только если заведение однажды приедет из внешнего источника.
+    # Клиент к Яндексу остался в коде и включится, если появится лицензия.
+    external_id = models.CharField(
+        max_length=64, blank=True, verbose_name='Идентификатор в источнике'
+    )
 
     name = models.CharField(max_length=255, db_index=True, verbose_name='Название')
-    address = models.CharField(max_length=500, blank=True, verbose_name='Адрес')
-    city = models.CharField(max_length=100, blank=True, db_index=True, verbose_name='Город')
+    address = models.CharField(max_length=500, verbose_name='Адрес')
+    city = models.CharField(max_length=100, db_index=True, verbose_name='Город')
+
+    normalized_name = models.CharField(max_length=255, db_index=True, editable=False)
+    normalized_address = models.CharField(max_length=500, db_index=True, editable=False)
+    normalized_city = models.CharField(max_length=100, db_index=True, editable=False)
+
     latitude = models.FloatField(null=True, blank=True, verbose_name='Широта')
     longitude = models.FloatField(null=True, blank=True, verbose_name='Долгота')
 
@@ -243,6 +312,10 @@ class Restaurant(models.Model):
         Brand, on_delete=models.SET_NULL, null=True, blank=True,
         related_name='restaurants', verbose_name='Сеть'
     )
+
+    # Сколько разных людей о нём постили. Пересчитывается вместе с показателями.
+    contributors_count = models.PositiveIntegerField(default=0, verbose_name='Разных авторов')
+    posts_count = models.PositiveIntegerField(default=0, verbose_name='Видимых постов')
 
     is_closed = models.BooleanField(default=False, verbose_name='Закрыто')
     is_hidden = models.BooleanField(default=False, verbose_name='Скрыто модератором')
@@ -253,9 +326,11 @@ class Restaurant(models.Model):
         verbose_name_plural = 'Заведения'
         ordering = ['name']
         constraints = [
-            # Уникальность только для заведений, у которых идентификатор источника есть.
-            # У точек, поставленных пользователем вручную, он пустой, и таких может
-            # быть сколько угодно — их склейка идёт по координатам.
+            models.UniqueConstraint(
+                fields=['normalized_city', 'normalized_name', 'normalized_address'],
+                name='restaurant_unique_city_name_address',
+            ),
+            # Пара «источник + идентификатор» уникальна, только когда идентификатор есть.
             models.UniqueConstraint(
                 fields=['source', 'external_id'],
                 condition=~models.Q(external_id=''),
@@ -263,11 +338,70 @@ class Restaurant(models.Model):
             ),
         ]
         indexes = [
-            models.Index(fields=['latitude', 'longitude']),
+            GinIndex(fields=['normalized_name'], name='restaurant_name_trgm',
+                     opclasses=['gin_trgm_ops']),
+            GinIndex(fields=['normalized_address'], name='restaurant_addr_trgm',
+                     opclasses=['gin_trgm_ops']),
         ]
 
     def __str__(self):
-        return f'{self.name} ({self.address})' if self.address else self.name
+        return f'{self.name} ({self.address})'
+
+    def save(self, *args, **kwargs):
+        self.normalized_name = normalize_name(self.name)
+        self.normalized_address = normalize_address(self.address)
+        self.normalized_city = normalize_name(self.city)
+        super().save(*args, **kwargs)
+
+    @property
+    def is_confirmed(self):
+        """Подтверждено, если о нём написали несколько разных людей."""
+        return self.contributors_count >= self.CONFIRMATIONS_REQUIRED
+
+    @property
+    def is_public(self):
+        return self.is_confirmed and not self.is_hidden
+
+
+class RestaurantAlias(models.Model):
+    """
+    Написание, под которым заведение уже пытались завести.
+
+    Заполняется при слиянии дублей: сама запись-дубль удаляется, а её название
+    и адрес остаются здесь. Так каждое слияние делает поиск умнее — в следующий раз
+    «Кафе Кофемания» найдёт «Кофеманию», а не создаст третий дубль.
+    """
+
+    restaurant = models.ForeignKey(
+        Restaurant, on_delete=models.CASCADE, related_name='aliases', verbose_name='Заведение'
+    )
+    name = models.CharField(max_length=255, verbose_name='Написание названия')
+    address = models.CharField(max_length=500, blank=True, verbose_name='Написание адреса')
+    normalized_name = models.CharField(max_length=255, db_index=True, editable=False)
+    normalized_address = models.CharField(max_length=500, db_index=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Синоним заведения'
+        verbose_name_plural = 'Синонимы заведений'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['restaurant', 'normalized_name', 'normalized_address'],
+                name='restaurantalias_unique',
+            ),
+        ]
+        indexes = [
+            GinIndex(fields=['normalized_name'], name='restaurantalias_name_trgm',
+                     opclasses=['gin_trgm_ops']),
+        ]
+
+    def __str__(self):
+        return f'{self.name} → {self.restaurant.name}'
+
+    def save(self, *args, **kwargs):
+        self.normalized_name = normalize_name(self.name)
+        self.normalized_address = normalize_address(self.address)
+        super().save(*args, **kwargs)
 
 
 # ---------------------------------------------------------------------------
@@ -284,11 +418,9 @@ class MenuItem(models.Model):
 
     STATUS_ACTIVE = 'active'
     STATUS_HIDDEN = 'hidden'
-    STATUS_MERGED = 'merged'
     STATUS_CHOICES = [
         (STATUS_ACTIVE, 'Активна'),
         (STATUS_HIDDEN, 'Скрыта'),
-        (STATUS_MERGED, 'Слита с другой'),
     ]
 
     restaurant = models.ForeignKey(
@@ -324,10 +456,6 @@ class MenuItem(models.Model):
 
     status = models.CharField(
         max_length=16, choices=STATUS_CHOICES, default=STATUS_ACTIVE, db_index=True, verbose_name='Статус'
-    )
-    merged_into = models.ForeignKey(
-        'self', on_delete=models.SET_NULL, null=True, blank=True,
-        related_name='merged_from', verbose_name='Слита в позицию'
     )
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -465,6 +593,12 @@ class Post(SoftDeleteModel):
     # Заведение, которое пользователь выбрал: из подсказок по названию либо ткнув
     # в метку на карте. В обоих случаях это его выбор, поэтому данные наши, а склейка
     # идёт по идентификатору организации — он одинаков для обоих способов.
+    # Заполняется, когда автор выбрал заведение из подсказок. Если пусто — он вводит
+    # новое, и оно будет создано при одобрении.
+    draft_restaurant = models.ForeignKey(
+        Restaurant, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='draft_posts', verbose_name='Выбранное заведение'
+    )
     draft_restaurant_external_id = models.CharField(
         max_length=64, blank=True, verbose_name='Идентификатор заведения в источнике'
     )
@@ -525,6 +659,18 @@ class Post(SoftDeleteModel):
     )
     moderated_at = models.DateTimeField(null=True, blank=True, verbose_name='Дата модерации')
     rejection_reason = models.TextField(blank=True, verbose_name='Причина отказа')
+
+    # --- Отметки для модератора, проставляет сервер при создании ---
+    # Похожее заведение существует, а автор всё равно заводит новое. Проверяет
+    # именно сервер: полагаться на то, что фронт показал подсказку, нельзя —
+    # обойти это через любой HTTP-клиент дело двух минут.
+    possible_duplicate = models.BooleanField(
+        default=False, db_index=True, verbose_name='Похоже на дубль'
+    )
+    # Название или адрес не прошли проверку на осмысленность: «asdfgh», «12345».
+    looks_suspicious = models.BooleanField(
+        default=False, db_index=True, verbose_name='Подозрительный ввод'
+    )
 
     created_at = models.DateTimeField(auto_now_add=True)
 

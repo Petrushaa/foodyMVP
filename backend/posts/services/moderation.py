@@ -15,8 +15,8 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from ..models import MenuItem, Post, normalize_name
-from .restaurants import get_or_create_restaurant
+from ..models import MenuItem, Post, Restaurant, normalize_name
+from .restaurants import get_or_create_restaurant, recalculate_restaurant_stats
 from .stats import recalculate_menu_item_stats, sync_menu_item_tags
 
 logger = logging.getLogger(__name__)
@@ -27,18 +27,24 @@ class ModerationError(Exception):
 
 
 def _restaurant_from_draft(post):
-    """Создаёт или находит заведение по данным, которые подтвердил автор поста."""
-    if not post.draft_restaurant_name:
-        raise ModerationError('В заявке нет заведения — одобрить пост нельзя.')
+    """
+    Находит или создаёт заведение по заявке.
+
+    Если автор выбрал существующее из подсказок — берём его. Иначе создаём новое
+    из введённых названия, адреса и города.
+    """
+    if post.draft_restaurant_id:
+        return post.draft_restaurant
+
+    if not post.draft_restaurant_name or not post.draft_restaurant_address:
+        raise ModerationError('В заявке нет названия или адреса заведения.')
 
     restaurant, created = get_or_create_restaurant(
         name=post.draft_restaurant_name,
         address=post.draft_restaurant_address,
         city=post.draft_restaurant_city,
-        latitude=post.draft_restaurant_latitude,
-        longitude=post.draft_restaurant_longitude,
+        source=post.draft_restaurant_source or Restaurant.SOURCE_USER,
         external_id=post.draft_restaurant_external_id,
-        source=post.draft_restaurant_source,
     )
     if created:
         logger.info('Модерация: создано заведение %s', restaurant.name)
@@ -133,6 +139,9 @@ def approve_post(post, moderator, *, menu_item=None, menu_item_name=None, accept
     # поэтому показатели пересчитываем сразу после одобрения.
     recalculate_menu_item_stats(target)
     sync_menu_item_tags(target)
+    # Заведение попадёт в публичный каталог, только когда о нём напишут
+    # несколько разных людей — счётчик авторов держим в актуальном виде.
+    recalculate_restaurant_stats(target.restaurant)
     return post
 
 
@@ -161,6 +170,7 @@ def reject_post(post, moderator, reason):
     if was_approved_for:
         recalculate_menu_item_stats(was_approved_for)
         sync_menu_item_tags(was_approved_for)
+        recalculate_restaurant_stats(was_approved_for.restaurant)
     return post
 
 
@@ -177,12 +187,7 @@ def similar_menu_items(post, limit=5):
     if post.menu_item_id or not post.draft_menu_item_name:
         return MenuItem.objects.none()
 
-    restaurant = None
-    if post.draft_restaurant_external_id:
-        from .restaurants import find_by_external_id
-        restaurant = find_by_external_id(
-            post.draft_restaurant_external_id, post.draft_restaurant_source,
-        )
+    restaurant = post.draft_restaurant
     if restaurant is None:
         return MenuItem.objects.none()
 

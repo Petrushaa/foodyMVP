@@ -24,6 +24,8 @@ from .models import (
     Comment, DishType, MenuItem, PlaceNotFoundReport, Post, PostImage, PostStatistics,
     PostTag, Restaurant, Tag, Taxon,
 )
+from .services.restaurants import find_exact, find_possible_duplicates
+from .services.text import check_address, check_name, is_definitely_garbage
 from users.serializers import FeedPostAuthorSerializer
 
 # Лимит размера одной фотографии
@@ -64,15 +66,14 @@ class DishTypeSerializer(serializers.ModelSerializer):
 
 
 class RestaurantSerializer(serializers.ModelSerializer):
-    maps_url = serializers.SerializerMethodField()
+    is_confirmed = serializers.BooleanField(read_only=True)
 
     class Meta:
         model = Restaurant
-        fields = ['id', 'name', 'address', 'city', 'is_closed', 'maps_url']
-
-    def get_maps_url(self, obj):
-        """Кнопка «Открыть в Картах» — требование условий использования API."""
-        return f'https://yandex.ru/maps/org/{obj.external_id}/'
+        fields = [
+            'id', 'name', 'address', 'city', 'is_closed',
+            'posts_count', 'contributors_count', 'is_confirmed',
+        ]
 
 
 class MenuItemSerializer(serializers.ModelSerializer):
@@ -99,10 +100,9 @@ class MenuItemDetailSerializer(MenuItemSerializer):
 
     tags = serializers.SerializerMethodField()
     brand_rating = serializers.SerializerMethodField()
-    maps_url = serializers.SerializerMethodField()
 
     class Meta(MenuItemSerializer.Meta):
-        fields = MenuItemSerializer.Meta.fields + ['tags', 'brand_rating', 'maps_url']
+        fields = MenuItemSerializer.Meta.fields + ['tags', 'brand_rating']
 
     def get_tags(self, obj):
         """Только теги, которые написали несколько разных людей."""
@@ -119,9 +119,6 @@ class MenuItemDetailSerializer(MenuItemSerializer):
         """
         from .services.stats import brand_rating
         return brand_rating(obj)
-
-    def get_maps_url(self, obj):
-        return f'https://yandex.ru/maps/org/{obj.restaurant.external_id}/'
 
 
 class PostImageSerializer(serializers.ModelSerializer):
@@ -202,12 +199,12 @@ class PostCreateSerializer(serializers.ModelSerializer):
         queryset=MenuItem.objects.filter(status=MenuItem.STATUS_ACTIVE),
         source='menu_item', required=False, allow_null=True, write_only=True,
     )
-    # …либо заявка на новую. Заведение пользователь выбирает двумя способами —
-    # из подсказок по названию или ткнув в метку на карте. Оба дают идентификатор
-    # организации, по нему заведения и склеиваются; координаты приходят только
-    # со второго способа.
-    restaurant_external_id = serializers.CharField(
-        max_length=64, required=False, allow_blank=True, write_only=True,
+    # …либо заявка на новую. Заведение — либо выбранное из подсказок (`restaurant_id`),
+    # либо введённое руками. Во втором случае сервер сам проверит, нет ли похожего:
+    # полагаться на то, что фронт показал подсказку, нельзя.
+    restaurant_id = serializers.PrimaryKeyRelatedField(
+        queryset=Restaurant.objects.filter(is_hidden=False),
+        source='draft_restaurant', required=False, allow_null=True, write_only=True,
     )
     restaurant_name = serializers.CharField(
         max_length=255, required=False, allow_blank=True, write_only=True,
@@ -217,12 +214,6 @@ class PostCreateSerializer(serializers.ModelSerializer):
     )
     restaurant_city = serializers.CharField(
         max_length=100, required=False, allow_blank=True, write_only=True,
-    )
-    restaurant_latitude = serializers.FloatField(
-        required=False, allow_null=True, min_value=-90, max_value=90, write_only=True,
-    )
-    restaurant_longitude = serializers.FloatField(
-        required=False, allow_null=True, min_value=-180, max_value=180, write_only=True,
     )
     menu_item_name = serializers.CharField(
         max_length=255, required=False, allow_blank=True, write_only=True,
@@ -258,8 +249,7 @@ class PostCreateSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             'id', 'menu_item_id', 'menu_item_name', 'dish_type_id', 'taxon_ids',
-            'restaurant_external_id', 'restaurant_name', 'restaurant_address',
-            'restaurant_city', 'restaurant_latitude', 'restaurant_longitude',
+            'restaurant_id', 'restaurant_name', 'restaurant_address', 'restaurant_city',
             'description', 'size', 'author_rating', 'price', 'tags_list', 'uploaded_images',
         ]
 
@@ -292,13 +282,16 @@ class PostCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(f'Не больше {MAX_TAGS_PER_POST} тегов в посте.')
         return cleaned
 
-    def validate_restaurant_external_id(self, value):
-        # Идентификаторы организаций у Яндекса — числовые строки. Полную проверку
-        # существования делает модератор при одобрении, чтобы не тратить квоту API
-        # на каждый черновик.
+    def validate_menu_item_name(self, value):
         value = value.strip()
-        if value and not value.isdigit():
-            raise serializers.ValidationError('Некорректный идентификатор заведения.')
+        if value and is_definitely_garbage(value):
+            raise serializers.ValidationError('Название блюда состоит не из букв.')
+        return value
+
+    def validate_restaurant_name(self, value):
+        value = value.strip()
+        if value and is_definitely_garbage(value):
+            raise serializers.ValidationError('Название заведения состоит не из букв.')
         return value
 
     # --- перекрёстные проверки ---
@@ -307,7 +300,6 @@ class PostCreateSerializer(serializers.ModelSerializer):
         user = self.context['request'].user
         menu_item = attrs.get('menu_item')
         name = (attrs.get('menu_item_name') or '').strip()
-        external_id = (attrs.get('restaurant_external_id') or '').strip()
 
         self._check_daily_limit(user)
 
@@ -319,7 +311,7 @@ class PostCreateSerializer(serializers.ModelSerializer):
         if menu_item:
             self._validate_existing_position(attrs, menu_item)
         else:
-            self._validate_new_position(attrs, name, external_id)
+            self._validate_new_position(attrs, name)
 
         return attrs
 
@@ -355,21 +347,12 @@ class PostCreateSerializer(serializers.ModelSerializer):
         if current and abs(price - current) < current * MIN_PRICE_CHANGE_RATIO:
             attrs.pop('price', None)
 
-    def _validate_new_position(self, attrs, name, external_id):
+    def _validate_new_position(self, attrs, name):
         """Позиции нет: нужна заявка целиком — заведение, название, тип блюда и цена."""
         if not name:
             raise serializers.ValidationError(
                 'Выберите позицию из списка или введите название новой.'
             )
-        if not external_id:
-            # Название заведения руками не принимаем: выбрать место можно только
-            # из подсказок или ткнув в метку на карте. Так исключаются вымышленные
-            # заведения и дубли одного места под разными написаниями.
-            raise serializers.ValidationError(
-                'Выберите заведение из подсказок или на карте.'
-            )
-        if not (attrs.get('restaurant_name') or '').strip():
-            raise serializers.ValidationError('Не передано название заведения.')
         if not attrs.get('draft_dish_type'):
             raise serializers.ValidationError(
                 'Выберите тип блюда — по нему подставляются категории.'
@@ -378,6 +361,33 @@ class PostCreateSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 'Укажите цену: вы создаёте новую позицию, и она станет её текущей ценой.'
             )
+        self._validate_restaurant(attrs)
+
+    def _validate_restaurant(self, attrs):
+        """
+        Заведение либо выбрано из подсказок, либо введено целиком.
+        Половинчатый ввод не принимаем — без адреса заведение не отличить от тёзки.
+        """
+        if attrs.get('draft_restaurant'):
+            return
+
+        restaurant_name = (attrs.get('restaurant_name') or '').strip()
+        address = (attrs.get('restaurant_address') or '').strip()
+        city = (attrs.get('restaurant_city') or '').strip()
+
+        if not restaurant_name:
+            raise serializers.ValidationError(
+                'Выберите заведение из списка или введите его название.'
+            )
+        if not address:
+            raise serializers.ValidationError('Укажите адрес заведения.')
+        if not city:
+            raise serializers.ValidationError('Укажите город.')
+
+        # Точное совпадение — молча привязываем к существующему, не создавая дубль.
+        exact = find_exact(restaurant_name, address, city)
+        if exact:
+            attrs['draft_restaurant'] = exact
 
     # --- создание ---
 
@@ -388,17 +398,22 @@ class PostCreateSerializer(serializers.ModelSerializer):
         images = validated_data.pop('uploaded_images', [])
         price = validated_data.pop('price', None)
         name = (validated_data.pop('menu_item_name', '') or '').strip()
+        restaurant_name = (validated_data.pop('restaurant_name', '') or '').strip()
+        address = (validated_data.pop('restaurant_address', '') or '').strip()
+        city = (validated_data.pop('restaurant_city', '') or '').strip()
+
+        flags = self._inspect(validated_data.get('draft_restaurant'), name,
+                              restaurant_name, address, city)
 
         post = Post.objects.create(
             user=self.context['request'].user,
             draft_menu_item_name=name,
-            draft_restaurant_source=Restaurant.SOURCE_YANDEX,
-            draft_restaurant_external_id=(validated_data.pop('restaurant_external_id', '') or '').strip(),
-            draft_restaurant_name=(validated_data.pop('restaurant_name', '') or '').strip(),
-            draft_restaurant_address=(validated_data.pop('restaurant_address', '') or '').strip(),
-            draft_restaurant_city=(validated_data.pop('restaurant_city', '') or '').strip(),
-            draft_restaurant_latitude=validated_data.pop('restaurant_latitude', None),
-            draft_restaurant_longitude=validated_data.pop('restaurant_longitude', None),
+            draft_restaurant_source=Restaurant.SOURCE_USER,
+            draft_restaurant_name=restaurant_name,
+            draft_restaurant_address=address,
+            draft_restaurant_city=city,
+            possible_duplicate=flags['possible_duplicate'],
+            looks_suspicious=flags['looks_suspicious'],
             proposed_price=price,
             proposed_price_status=(
                 Post.PRICE_PROPOSAL_PENDING if price is not None else Post.PRICE_PROPOSAL_NONE
@@ -416,6 +431,28 @@ class PostCreateSerializer(serializers.ModelSerializer):
             PostTag.objects.create(post=post, tag=tag)
 
         return post
+
+    def _inspect(self, chosen_restaurant, item_name, restaurant_name, address, city):
+        """
+        Проверки, которые делает **сервер, а не фронт**.
+
+        Фронт мог показать подсказку, а мог и не показать — а мог вообще не
+        участвовать, если запрос отправили curl-ом. Поэтому похожие заведения
+        ищем здесь заново, и здесь же прогоняем эвристики осмысленности ввода.
+        Ничего не запрещаем: ставим пометки, по которым модератор увидит,
+        на что смотреть в первую очередь.
+        """
+        suspicious = bool(check_name(item_name))
+
+        if chosen_restaurant is not None:
+            # Заведение выбрано из списка — дубля быть не может по определению.
+            return {'possible_duplicate': False, 'looks_suspicious': suspicious}
+
+        suspicious = suspicious or bool(check_name(restaurant_name)) \
+            or bool(check_address(address))
+
+        duplicate = find_possible_duplicates(restaurant_name, address, city).exists()
+        return {'possible_duplicate': duplicate, 'looks_suspicious': suspicious}
 
 
 class PostUpdateSerializer(serializers.ModelSerializer):
@@ -493,14 +530,17 @@ class ModerationPostSerializer(serializers.ModelSerializer):
 
     will_create = serializers.SerializerMethodField()
     similar_menu_items = serializers.SerializerMethodField()
+    similar_restaurants = serializers.SerializerMethodField()
     price_change = serializers.SerializerMethodField()
+    warnings = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
         fields = [
             'id', 'user', 'description', 'size', 'author_rating', 'images', 'tags',
             'created_at', 'status', 'menu_item',
-            'will_create', 'similar_menu_items', 'price_change',
+            'will_create', 'similar_menu_items', 'similar_restaurants',
+            'price_change', 'warnings', 'possible_duplicate', 'looks_suspicious',
         ]
 
     def get_will_create(self, obj):
@@ -508,21 +548,17 @@ class ModerationPostSerializer(serializers.ModelSerializer):
         if obj.menu_item_id:
             return None
 
-        from .services.restaurants import find_by_external_id
-        existing = find_by_external_id(
-            obj.draft_restaurant_external_id, obj.draft_restaurant_source,
-        )
+        chosen = obj.draft_restaurant
         return {
             'restaurant': {
-                'name': obj.draft_restaurant_name,
-                'address': obj.draft_restaurant_address,
-                'city': obj.draft_restaurant_city,
-                'external_id': obj.draft_restaurant_external_id,
-                'maps_url': (
-                    f'https://yandex.ru/maps/org/{obj.draft_restaurant_external_id}/'
-                    if obj.draft_restaurant_external_id else None
-                ),
-                'is_new': existing is None,
+                'id': chosen.id if chosen else None,
+                'name': chosen.name if chosen else obj.draft_restaurant_name,
+                'address': chosen.address if chosen else obj.draft_restaurant_address,
+                'city': chosen.city if chosen else obj.draft_restaurant_city,
+                # Новое заведение — то, чего в справочнике ещё нет. На него
+                # модератор смотрит внимательнее всего.
+                'is_new': chosen is None,
+                'posts_count': chosen.posts_count if chosen else 0,
             },
             'menu_item': {
                 'name': obj.draft_menu_item_name,
@@ -531,6 +567,37 @@ class ModerationPostSerializer(serializers.ModelSerializer):
                 'price': obj.proposed_price,
             },
         }
+
+    def get_similar_restaurants(self, obj):
+        """
+        Похожие заведения — когда автор заводит новое, хотя такое уже есть.
+        Именно этот список и есть ответ на попытку обойти подсказки.
+        """
+        if obj.draft_restaurant_id or not obj.draft_restaurant_name:
+            return []
+        found = find_possible_duplicates(
+            obj.draft_restaurant_name, obj.draft_restaurant_address, obj.draft_restaurant_city,
+        )
+        return [
+            {
+                'id': item.id, 'name': item.name, 'address': item.address,
+                'posts_count': item.posts_count,
+                'similarity': round(item.name_similarity, 2),
+            }
+            for item in found
+        ]
+
+    def get_warnings(self, obj):
+        """Человекочитаемые причины, почему пост помечен. Модератору — сразу текстом."""
+        messages = []
+        if obj.possible_duplicate:
+            messages.append('Похожее заведение уже есть, а автор создаёт новое')
+        if obj.draft_menu_item_name:
+            messages += check_name(obj.draft_menu_item_name)
+        if not obj.draft_restaurant_id and obj.draft_restaurant_name:
+            messages += check_name(obj.draft_restaurant_name)
+            messages += check_address(obj.draft_restaurant_address)
+        return messages
 
     def get_similar_menu_items(self, obj):
         from .services.moderation import similar_menu_items

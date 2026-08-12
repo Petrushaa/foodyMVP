@@ -18,9 +18,8 @@ from ..serializers import (
     DishTypeSerializer, MenuItemDetailSerializer, MenuItemSerializer,
     PostListSerializer, RestaurantSerializer, TaxonSerializer,
 )
-from ..services.restaurants import find_by_external_id
+from ..services.restaurants import search_restaurants
 from ..services.search import search_menu_items
-from ..services.yandex import suggest_places
 
 
 class DishTypeListView(ListAPIView):
@@ -47,37 +46,37 @@ class TaxonListView(ListAPIView):
 
 class PlaceSuggestView(APIView):
     """
-    Подсказки заведений при вводе — проксируем Геосаджест своим ключом.
+    Подсказки заведений при вводе названия — из нашего справочника.
 
-    Обязательно передавать `ll` (центр поиска «долгота,широта»): без окна поиска
-    Яндекс отдаёт результаты по всей стране, и человек в Москве получит кофейни
-    в Санкт-Петербурге. Это проверено на живом API.
+    Это главная защита от дублей: человек видит, что такое место уже заведено,
+    и выбирает его вместо того, чтобы создавать второе. Поэтому рядом отдаём
+    адрес и число постов — увидев «Кофемания, Пушкина 10 · 24 поста» рядом
+    с «Кофемания, Пушкина 10 · 1 пост», выберут первое, и дубль умрёт сам.
+
+    Ищем нечётко и по синонимам: написания, под которыми это место уже пытались
+    завести, тоже ведут к нему.
     """
 
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        places = suggest_places(
+        found = search_restaurants(
             request.query_params.get('text', ''),
-            ll=request.query_params.get('ll'),
-            spn=request.query_params.get('spn'),
+            city=request.query_params.get('city', ''),
         )
         return Response([
             {
-                'external_id': place.external_id,
-                'name': place.name,
-                'address': place.address,
-                'city': place.city,
-                'subtitle': place.subtitle,
-                'categories': place.categories,
-                'maps_url': place.maps_url,
-                # Есть ли это заведение уже у нас: если да, фронт сразу покажет
-                # его позиции подсказками «такое блюдо уже есть».
-                'known_restaurant_id': getattr(
-                    find_by_external_id(place.external_id), 'id', None
-                ),
+                'id': restaurant.id,
+                'name': restaurant.name,
+                'address': restaurant.address,
+                'city': restaurant.city,
+                'posts_count': restaurant.posts_count,
+                'contributors_count': restaurant.contributors_count,
+                # Неподтверждённые показываем, но помечаем: о них написал один
+                # человек, и в публичный каталог они ещё не попали.
+                'is_confirmed': restaurant.is_confirmed,
             }
-            for place in places
+            for restaurant in found
         ])
 
 
@@ -159,9 +158,14 @@ class RestaurantViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        queryset = Restaurant.objects.filter(is_hidden=False).select_related('brand')
+        # В публичный каталог попадают только подтверждённые заведения — те,
+        # о которых написали несколько разных людей. Так выдуманное место
+        # не всплывает, даже если модератор его проглядел.
+        queryset = Restaurant.objects.filter(
+            is_hidden=False, contributors_count__gte=Restaurant.CONFIRMATIONS_REQUIRED,
+        ).select_related('brand')
         city = self.request.query_params.get('city')
-        return queryset.filter(city__iexact=city) if city else queryset
+        return queryset.filter(normalized_city=city.strip().lower()) if city else queryset
 
     @action(detail=True, methods=['get'])
     def menu(self, request, pk=None):

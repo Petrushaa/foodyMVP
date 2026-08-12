@@ -1,7 +1,7 @@
 from django.contrib import admin
 
 from .models import (
-    Tag, Taxon, DishType, Brand, Restaurant,
+    Tag, Taxon, DishType, Brand, Restaurant, RestaurantAlias,
     MenuItem, MenuItemAlias, MenuItemTag,
     Post, PostImage, PostStatistics, PostLike, PostSave,
     Comment, CommentLike, MenuItemReport, PlaceNotFoundReport,
@@ -42,13 +42,26 @@ class BrandAdmin(admin.ModelAdmin):
 
 # --- Заведения и позиции ---------------------------------------------------
 
+class RestaurantAliasInline(admin.TabularInline):
+    model = RestaurantAlias
+    extra = 0
+    readonly_fields = ('created_at',)
+
+
 @admin.register(Restaurant)
 class RestaurantAdmin(admin.ModelAdmin):
-    list_display = ('id', 'name', 'city', 'brand', 'source', 'is_closed', 'is_hidden')
+    list_display = (
+        'id', 'name', 'address', 'city', 'contributors_count', 'posts_count',
+        'is_closed', 'is_hidden',
+    )
     list_filter = ('source', 'is_closed', 'is_hidden', 'city')
-    search_fields = ('name', 'address', 'external_id')
-    readonly_fields = ('created_at',)
+    search_fields = ('name', 'normalized_name', 'address', 'city')
+    readonly_fields = (
+        'normalized_name', 'normalized_address', 'normalized_city',
+        'contributors_count', 'posts_count', 'created_at',
+    )
     autocomplete_fields = ('brand',)
+    inlines = [RestaurantAliasInline]
 
 
 class MenuItemAliasInline(admin.TabularInline):
@@ -68,6 +81,7 @@ class MenuItemAdmin(admin.ModelAdmin):
     list_filter = ('status', 'dish_type')
     search_fields = ('name', 'normalized_name', 'restaurant__name')
     readonly_fields = ('normalized_name', 'rating', 'rating_raw', 'ratings_count', 'posts_count', 'created_at')
+    autocomplete_fields = ('restaurant',)
     filter_horizontal = ('taxons',)
     inlines = [MenuItemAliasInline, MenuItemTagInline]
 
@@ -88,8 +102,8 @@ class PostImageInline(admin.TabularInline):
 
 @admin.register(Post)
 class PostAdmin(admin.ModelAdmin):
-    list_display = ('id', 'user', 'menu_item', 'status', 'author_rating', 'proposed_price_status', 'created_at', 'deleted_at')
-    list_filter = ('status', 'proposed_price_status', 'created_at', 'deleted_at')
+    list_display = ('id', 'user', 'menu_item', 'status', 'author_rating', 'possible_duplicate', 'looks_suspicious', 'created_at', 'deleted_at')
+    list_filter = ('status', 'possible_duplicate', 'looks_suspicious', 'proposed_price_status', 'created_at', 'deleted_at')
     search_fields = ('description', 'user__username', 'draft_menu_item_name')
     readonly_fields = ('moderated_by', 'moderated_at', 'created_at')
     filter_horizontal = ('draft_taxons',)
