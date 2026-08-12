@@ -31,7 +31,8 @@ export async function rejectPostClient(
     _accessToken?: string,
 ) {
     try {
-        await bePost(`/moderation/${postId}/reject`, { rejection_reason: reason ?? "" });
+        // Бэкенд ждёт поле reason; в модели оно хранится как rejection_reason.
+        await bePost(`/moderation/${postId}/reject`, { reason: reason ?? "" });
         return { success: true as const };
     } catch (e: any) {
         return { error: e?.message || "Ошибка отклонения" };

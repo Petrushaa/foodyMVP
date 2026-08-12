@@ -34,7 +34,8 @@ export async function rejectPost(postId: number | string, reason: string) {
         await apiRequest(`/moderation/${postId}/reject/`, {
             method: "POST",
             headers: { Authorization: `Bearer ${session.user.accessToken}` },
-            body: JSON.stringify({ rejection_reason: reason ?? "" }),
+            // Бэкенд ждёт поле reason; в модели оно хранится как rejection_reason.
+            body: JSON.stringify({ reason: reason ?? "" }),
         });
         revalidatePath("/staff");
         return { success: true };
