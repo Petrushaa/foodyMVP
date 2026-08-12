@@ -41,3 +41,4 @@ whitenoise==6.8.2
 
 # Security / sanitization
 bleach==6.1.0
+requests==2.34.2

@@ -43,6 +43,8 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    # Нужен для триграммного поиска позиций (pg_trgm)
+    'django.contrib.postgres',
 
     # Third party
     'rest_framework',
@@ -229,6 +231,43 @@ SPECTACULAR_SETTINGS = {
 # Максимальная оценка для отзывов (PostReview). Можно изменить через ENV и перезапустить Django.
 MAX_REVIEW_RATING = get_env_int('MAX_REVIEW_RATING', 10)
 
+# Порог доверия в байесовской формуле рейтинга позиции («m»). Чем больше, тем сильнее
+# рейтинг позиции с малым числом оценок притягивается к среднему по сервису.
+RATING_PRIOR_COUNT = get_env_int('RATING_PRIOR_COUNT', 5)
+# Среднее по сервису («C») меняется медленно — держим в кэше, чтобы одобрение
+# каждого поста не тянуло агрегат по всей таблице позиций.
+RATING_GLOBAL_AVG_TTL = int(get_env_time_interval('RATING_GLOBAL_AVG_TTL', '1h'))
+
+# --- Яндекс.Карты ---------------------------------------------------------
+# Продукты (JavaScript API, Геосаджест, Геокодер) подключаются в Кабинете разработчика
+# и активируются не мгновенно: на практике около часа, а не заявленные 15 минут. Пока
+# продукт не активирован, запросы к нему отвечают 403 «Invalid api key» при верном ключе.
+#
+# Ключ может быть один на все продукты или свой на каждый — поддерживаем оба варианта.
+YANDEX_MAPS_API_KEY = os.environ.get('YANDEX_MAPS_API_KEY', '')  # JavaScript API (браузер)
+# Серверный ключ для Геосаджеста. Если отдельной переменной нет — берём общий.
+YANDEX_GEO_API_KEY = os.environ.get('YANDEX_GEO_API_KEY') or YANDEX_MAPS_API_KEY
+
+YANDEX_API_TIMEOUT = get_env_int('YANDEX_API_TIMEOUT', 5)
+
+# Суточный лимит Геосаджеста на бесплатном тарифе — 1000 запросов на весь сервис.
+YANDEX_SUGGEST_DAILY_LIMIT = get_env_int('YANDEX_SUGGEST_DAILY_LIMIT', 1000)
+# Держим часть квоты про запас для фонового обновления заведений, чтобы
+# пользовательский поиск не съел её целиком.
+YANDEX_SUGGEST_QUOTA_RESERVE = get_env_int('YANDEX_SUGGEST_QUOTA_RESERVE', 200)
+# Не ходим в API на слишком короткий ввод — осмысленных подсказок там нет,
+# а квота тратится.
+YANDEX_SUGGEST_MIN_QUERY_LENGTH = get_env_int('YANDEX_SUGGEST_MIN_QUERY_LENGTH', 3)
+YANDEX_SUGGEST_RESULTS = get_env_int('YANDEX_SUGGEST_RESULTS', 7)
+# Размер окна поиска в градусах. Без окна выдача разбросана по всей стране.
+YANDEX_SUGGEST_DEFAULT_SPN = os.environ.get('YANDEX_SUGGEST_DEFAULT_SPN', '0.3,0.3')
+# Сервис работает только по России, поэтому подсказки ограничиваем страной.
+YANDEX_SUGGEST_COUNTRIES = os.environ.get('YANDEX_SUGGEST_COUNTRIES', 'ru')
+# Кэш ответов на одинаковые поисковые запросы — чтобы не выесть суточную квоту
+# на повторных подсказках. Это кэш HTTP-запроса, а не хранение данных о заведениях:
+# сам Яндекс такое кэширование рекомендует, потолок по их условиям — 30 дней.
+YANDEX_SUGGEST_CACHE_TTL = int(get_env_time_interval('YANDEX_SUGGEST_CACHE_TTL', '7d'))
+
 # Размер страницы для очереди модерации. Можно изменить через ENV и перезапустить Django.
 MODERATION_PAGE_SIZE = get_env_int('MODERATION_PAGE_SIZE', 10)
 
@@ -245,9 +284,12 @@ CELERY_RESULT_BACKEND = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
 
 # Celery Beat tasks scheduling
 CELERY_BEAT_SCHEDULE = {
-    'update-post-ratings': {
-        'task': 'posts.tasks.update_post_ratings',
-        'schedule': float(get_env_time_interval('UPDATE_STATS_INTERVAL', '5m')),
+    # Рейтинг позиции пересчитывается сразу при одобрении поста. Задача нужна для
+    # другого: среднее по сервису со временем плывёт, а от него зависит рейтинг
+    # каждой позиции. Плюс страховка от рассинхрона.
+    'recalculate-menu-item-ratings': {
+        'task': 'posts.tasks.recalculate_menu_item_ratings',
+        'schedule': float(get_env_time_interval('RATING_RECALC_INTERVAL', '6h')),
     },
 }
 

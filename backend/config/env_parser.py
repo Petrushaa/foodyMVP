@@ -3,16 +3,16 @@ import re
 
 def parse_time_interval(value: str, default: int = 300) -> int:
     """
-    Парсит строку с интервалом вида '10s', '1m', '1h' в секунды.
+    Парсит строку с интервалом вида '10s', '1m', '1h', '30d' в секунды.
     Если формат неверный или значение пустое, возвращает default.
     """
     if not value:
         return default
-        
+
     value = value.strip().lower()
-    
+
     # Регулярка для извлечения числа и единицы измерения
-    match = re.match(r'^(\d+)([smh])$', value)
+    match = re.match(r'^(\d+)([smhd])$', value)
     
     if not match:
         try:
@@ -30,7 +30,9 @@ def parse_time_interval(value: str, default: int = 300) -> int:
         return num * 60
     elif unit == 'h':
         return num * 3600
-        
+    elif unit == 'd':
+        return num * 86400
+
     return default
 
 def get_env_time_interval(env_name: str, default_value: str = '5m') -> int:

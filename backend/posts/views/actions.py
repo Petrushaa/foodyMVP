@@ -1,109 +1,131 @@
-import logging
+"""
+Вовлечённость: лайки, сохранения, комментарии.
 
-from django.db import transaction
-from rest_framework import status, permissions
-from rest_framework.decorators import action
+Лайки и сохранения удаляются **по-настоящему**: снял лайк — записи нет, это не контент.
+Комментарии удаляются мягко, как и посты, — механика хранения в проекте одна на всё.
+"""
+
+from django.db.models import Count, Prefetch
+from rest_framework import permissions, status, viewsets
+from rest_framework.exceptions import PermissionDenied
+from rest_framework.generics import get_object_or_404
 from rest_framework.response import Response
-from ..models import Post, PostLike, PostSave, Comment
+from rest_framework.views import APIView
+
+from ..models import Comment, CommentLike, Post, PostLike, PostSave
 from ..serializers import CommentSerializer
 
-logger = logging.getLogger(__name__)
 
-class PostActionsMixin:
+def _approved_post(pk):
+    """Лайкать и комментировать можно только опубликованные посты."""
+    return get_object_or_404(Post.objects.filter(status=Post.STATUS_APPROVED), pk=pk)
+
+
+class _ToggleView(APIView):
     """
-    Миксин для доп. действий с постами (лайки, сохранения, комментарии).
+    Общая механика лайка и сохранения: POST ставит, DELETE снимает.
+
+    Повторный POST не создаёт дубль — на паре «пост + пользователь» стоит
+    уникальность в базе, и `get_or_create` просто вернёт существующую запись.
     """
-    
-    @action(detail=True, methods=['get', 'post'], permission_classes=[permissions.IsAuthenticatedOrReadOnly])
-    def comments(self, request, pk=None):
-        """
-        Возвращает постраничный список комментариев к посту (GET) 
-        или создает новый комментарий от имени текущего пользователя (POST).
-        """
-        post = self.get_object()
-        if request.method == 'GET':
-            comments_queryset = post.comments.select_related('user').all()
-            page = self.paginate_queryset(comments_queryset)
-            if page is not None:
-                serializer = CommentSerializer(page, many=True, context={"request": request})
-                return self.get_paginated_response(serializer.data)
-            serializer = CommentSerializer(comments_queryset, many=True, context={"request": request})
-            return Response(serializer.data)
-        elif request.method == 'POST':
-            return self._create_comment(request, post)
-            
-    def _create_comment(self, request, post):
-        """Хелпер для валидации и создания комментария"""
-        serializer = CommentSerializer(data=request.data, context={"request": request})
-        serializer.is_valid(raise_exception=True)
-        serializer.save(user=request.user, post=post)
-        return Response(serializer.data, status=status.HTTP_201_CREATED)
 
-    @action(detail=True, methods=['delete'], url_path='comments/(?P<comment_pk>[^/.]+)',
-            permission_classes=[permissions.IsAuthenticated])
-    def delete_comment(self, request, pk=None, comment_pk=None):
-        """
-        Удаляет комментарий. Автор может удалить свой, стаф — любой.
-        Сигнал on_comment_deleted атомарно уменьшит comments_count.
-        """
-        post = self.get_object()
-        try:
-            comment = Comment.objects.get(pk=comment_pk, post=post)
-        except Comment.DoesNotExist:
-            return Response(status=status.HTTP_404_NOT_FOUND)
+    permission_classes = [permissions.IsAuthenticated]
+    model = None
+    counter_field = ''
 
-        if comment.user != request.user and not request.user.is_staff:
-            logger.warning('User %s tried to delete comment %s owned by %s', request.user.id, comment_pk, comment.user.id)
-            return Response(status=status.HTTP_403_FORBIDDEN)
+    def post(self, request, post_id):
+        post = _approved_post(post_id)
+        _, created = self.model.objects.get_or_create(post=post, user=request.user)
+        return Response(
+            self._state(post, True),
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
 
-        logger.info('Comment %s on post %s deleted by user %s', comment_pk, pk, request.user.id)
-        comment.delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
+    def delete(self, request, post_id):
+        post = _approved_post(post_id)
+        self.model.objects.filter(post=post, user=request.user).delete()
+        return Response(self._state(post, False))
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
-    def like(self, request, pk=None):
-        """
-        Toggle лайка на пост. Сначала get_object() (через queryset с фильтрами
-        approved-or-own) — для не-автора чужой pending/rejected даст 404.
-        Затем берём строку под select_for_update — параллельные POST'ы от
-        одного юзера сериализуются и финальное состояние совпадает с
-        чётностью количества кликов.
+    def _state(self, post, active):
+        post.refresh_from_db()
+        statistics = getattr(post, 'statistics', None)
+        return {
+            'active': active,
+            'count': getattr(statistics, self.counter_field, 0) if statistics else 0,
+        }
 
-        Запрет: автор НЕ может лайкать собственный pending/rejected пост
-        (накрутка скрытого контента до модерации).
-        """
-        post = self.get_object()  # 404 если не виден юзеру
-        user = request.user
 
-        if post.status != Post.STATUS_APPROVED and post.user_id == user.id:
-            return Response(
-                {"detail": "Нельзя лайкать собственный пост до одобрения модератором."},
-                status=status.HTTP_403_FORBIDDEN,
+class PostLikeView(_ToggleView):
+    model = PostLike
+    counter_field = 'likes_count'
+
+
+class PostSaveView(_ToggleView):
+    model = PostSave
+    counter_field = 'saves_count'
+
+
+class CommentViewSet(viewsets.ModelViewSet):
+    """
+    Комментарии. Список фильтруется по посту: `?post=<id>`.
+
+    Редактировать и удалять может только автор. Удаление мягкое: запись остаётся
+    в базе, из выдачи пропадает, счётчик комментариев поста уменьшается сигналом.
+    """
+
+    serializer_class = CommentSerializer
+    permission_classes = [permissions.IsAuthenticatedOrReadOnly]
+
+    def get_queryset(self):
+        queryset = (
+            Comment.objects
+            .select_related('user')
+            .annotate(likes_total=Count('likes', distinct=True))
+            .order_by('created_at')
+        )
+
+        post_id = self.request.query_params.get('post')
+        if post_id:
+            queryset = queryset.filter(post_id=post_id)
+
+        user = self.request.user
+        if user.is_authenticated:
+            queryset = queryset.prefetch_related(
+                Prefetch('likes', queryset=CommentLike.objects.filter(user=user),
+                         to_attr='prefetched_likes'),
             )
+        return queryset
 
-        with transaction.atomic():
-            # повторный SELECT под блокировкой по этому посту, чтобы
-            # параллельный like от того же юзера дождался коммита.
-            Post.objects.select_for_update().filter(pk=post.pk).first()
-            like_obj, created = PostLike.objects.get_or_create(post=post, user=user)
-            if not created:
-                like_obj.delete()
-                return Response({"liked": False}, status=status.HTTP_200_OK)
-            return Response({"liked": True}, status=status.HTTP_200_OK)
+    def perform_create(self, serializer):
+        serializer.save(user=self.request.user)
 
-    @action(detail=True, methods=['post'], permission_classes=[permissions.IsAuthenticated])
-    def save_post(self, request, pk=None):
-        """
-        Toggle закладки. Атомарно (см. like()). Сохранять можно любой
-        видимый юзеру пост — даже свой pending (это персональный bookmark,
-        не социальный сигнал, поэтому накрутки тут нет).
-        """
-        post = self.get_object()
-        user = request.user
-        with transaction.atomic():
-            Post.objects.select_for_update().filter(pk=post.pk).first()
-            save_obj, created = PostSave.objects.get_or_create(post=post, user=user)
-            if not created:
-                save_obj.delete()
-                return Response({"saved": False}, status=status.HTTP_200_OK)
-            return Response({"saved": True}, status=status.HTTP_200_OK)
+    def _check_author(self, instance):
+        if instance.user_id != self.request.user.id:
+            raise PermissionDenied('Это чужой комментарий.')
+
+    def perform_update(self, serializer):
+        self._check_author(serializer.instance)
+        serializer.save()
+
+    def perform_destroy(self, instance):
+        self._check_author(instance)
+        instance.delete()  # мягкое
+
+
+class CommentLikeView(APIView):
+    """Лайк комментария. Зеркало лайка поста."""
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, comment_id):
+        comment = get_object_or_404(Comment.objects.all(), pk=comment_id)
+        _, created = CommentLike.objects.get_or_create(comment=comment, user=request.user)
+        return Response(
+            {'active': True, 'count': comment.likes.count()},
+            status=status.HTTP_201_CREATED if created else status.HTTP_200_OK,
+        )
+
+    def delete(self, request, comment_id):
+        comment = get_object_or_404(Comment.objects.all(), pk=comment_id)
+        CommentLike.objects.filter(comment=comment, user=request.user).delete()
+        return Response({'active': False, 'count': comment.likes.count()})

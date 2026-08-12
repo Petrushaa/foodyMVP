@@ -1,0 +1,179 @@
+"""
+Каталог: позиции, заведения, справочники и подсказки для формы создания поста.
+
+Чтение здесь открыто без входа — лента, страницы позиций и заведений должны
+индексироваться поисковиками и открываться по ссылке из мессенджера. Действия
+(пост, лайк, комментарий) остаются только для залогиненных.
+"""
+
+from django.shortcuts import get_object_or_404
+from rest_framework import permissions, viewsets
+from rest_framework.decorators import action
+from rest_framework.generics import ListAPIView
+from rest_framework.response import Response
+from rest_framework.views import APIView
+
+from ..models import DishType, MenuItem, Restaurant, Taxon
+from ..serializers import (
+    DishTypeSerializer, MenuItemDetailSerializer, MenuItemSerializer,
+    PostListSerializer, RestaurantSerializer, TaxonSerializer,
+)
+from ..services.restaurants import find_by_external_id
+from ..services.search import search_menu_items
+from ..services.yandex import suggest_places
+
+
+class DishTypeListView(ListAPIView):
+    """Справочник блюд с категориями по умолчанию — для формы создания поста."""
+
+    serializer_class = DishTypeSerializer
+    permission_classes = [permissions.AllowAny]
+    queryset = DishType.objects.prefetch_related('default_taxons').all()
+    pagination_class = None
+
+
+class TaxonListView(ListAPIView):
+    """Категории всех четырёх осей. Фильтр `?kind=cuisine|format|form|diet`."""
+
+    serializer_class = TaxonSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        queryset = Taxon.objects.all()
+        kind = self.request.query_params.get('kind')
+        return queryset.filter(kind=kind) if kind else queryset
+
+
+class PlaceSuggestView(APIView):
+    """
+    Подсказки заведений при вводе — проксируем Геосаджест своим ключом.
+
+    Обязательно передавать `ll` (центр поиска «долгота,широта»): без окна поиска
+    Яндекс отдаёт результаты по всей стране, и человек в Москве получит кофейни
+    в Санкт-Петербурге. Это проверено на живом API.
+    """
+
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        places = suggest_places(
+            request.query_params.get('text', ''),
+            ll=request.query_params.get('ll'),
+            spn=request.query_params.get('spn'),
+        )
+        return Response([
+            {
+                'external_id': place.external_id,
+                'name': place.name,
+                'address': place.address,
+                'city': place.city,
+                'subtitle': place.subtitle,
+                'categories': place.categories,
+                'maps_url': place.maps_url,
+                # Есть ли это заведение уже у нас: если да, фронт сразу покажет
+                # его позиции подсказками «такое блюдо уже есть».
+                'known_restaurant_id': getattr(
+                    find_by_external_id(place.external_id), 'id', None
+                ),
+            }
+            for place in places
+        ])
+
+
+class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
+    """
+    Позиции: поиск, карточка блюда и его посты.
+
+    Фильтры по четырём осям: `?cuisine=american&format=fastfood&form=burgers&diet=vegan`.
+    Значения — слаги категорий, можно перечислять через запятую.
+    """
+
+    permission_classes = [permissions.AllowAny]
+
+    def get_serializer_class(self):
+        return MenuItemDetailSerializer if self.action == 'retrieve' else MenuItemSerializer
+
+    def get_queryset(self):
+        queryset = (
+            MenuItem.objects
+            .filter(status=MenuItem.STATUS_ACTIVE, posts_count__gt=0)
+            .select_related('restaurant', 'restaurant__brand', 'dish_type')
+            .prefetch_related('taxons')
+        )
+
+        for kind in (Taxon.KIND_CUISINE, Taxon.KIND_FORMAT, Taxon.KIND_FORM, Taxon.KIND_DIET):
+            raw = self.request.query_params.get(kind)
+            if not raw:
+                continue
+            slugs = [slug.strip() for slug in raw.split(',') if slug.strip()]
+            # Несколько осей сужают выдачу, несколько значений одной оси — расширяют.
+            queryset = queryset.filter(taxons__kind=kind, taxons__slug__in=slugs)
+
+        restaurant_id = self.request.query_params.get('restaurant')
+        if restaurant_id:
+            queryset = queryset.filter(restaurant_id=restaurant_id)
+
+        return queryset.distinct().order_by('-rating')
+
+    @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
+    def search(self, request):
+        """
+        Умный поиск позиций: опечатки, синонимы, латиница и неверная раскладка.
+
+        Используется при создании поста, поэтому ищет и среди позиций без постов —
+        иначе человек не найдёт только что созданную и заведёт дубль.
+        """
+        restaurant = None
+        restaurant_id = request.query_params.get('restaurant')
+        if restaurant_id:
+            restaurant = Restaurant.objects.filter(pk=restaurant_id).first()
+
+        found = search_menu_items(
+            request.query_params.get('text', ''),
+            restaurant=restaurant,
+            include_empty=True,
+        )
+        return Response(MenuItemSerializer(found, many=True, context={'request': request}).data)
+
+    @action(detail=True, methods=['get'])
+    def posts(self, request, pk=None):
+        """Все посты про эту позицию."""
+        from ..models import Post
+
+        queryset = (
+            Post.objects
+            .filter(menu_item_id=pk, status=Post.STATUS_APPROVED)
+            .select_related('user', 'statistics')
+            .prefetch_related('images', 'tags')
+        )
+        page = self.paginate_queryset(queryset)
+        serializer = PostListSerializer(page, many=True, context={'request': request})
+        return self.get_paginated_response(serializer.data)
+
+
+class RestaurantViewSet(viewsets.ReadOnlyModelViewSet):
+    """Заведения и их позиции. Ручного CRUD нет — заводятся только через модерацию."""
+
+    serializer_class = RestaurantSerializer
+    permission_classes = [permissions.AllowAny]
+
+    def get_queryset(self):
+        queryset = Restaurant.objects.filter(is_hidden=False).select_related('brand')
+        city = self.request.query_params.get('city')
+        return queryset.filter(city__iexact=city) if city else queryset
+
+    @action(detail=True, methods=['get'])
+    def menu(self, request, pk=None):
+        """Позиции заведения, лучшие сверху."""
+        restaurant = get_object_or_404(self.get_queryset(), pk=pk)
+        items = (
+            MenuItem.objects
+            .filter(restaurant=restaurant, status=MenuItem.STATUS_ACTIVE, posts_count__gt=0)
+            .select_related('restaurant', 'dish_type')
+            .prefetch_related('taxons')
+            .order_by('-rating')
+        )
+        page = self.paginate_queryset(items)
+        serializer = MenuItemSerializer(page, many=True, context={'request': request})
+        return self.get_paginated_response(serializer.data)
