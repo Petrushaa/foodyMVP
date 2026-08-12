@@ -1,248 +1,170 @@
+"""
+Справочник заведений: нормализация, склейка дублей, слияние, подтверждение.
+
+Справочник целиком наш, поэтому за дубли и выдуманные места отвечаем мы —
+и именно эти проверки ломать больнее всего.
+"""
+
 import pytest
-from django.urls import reverse
-from posts.models import Restaurant, Dish, Category, Post, DishType
-from users.models import User
-from rest_framework.test import APIClient
 
-@pytest.fixture
-def api_client():
-    return APIClient()
+from posts.models import MenuItem, Restaurant, RestaurantAlias, normalize_address, normalize_name
+from posts.services.restaurants import (
+    find_exact, find_possible_duplicates, get_or_create_restaurant, merge_restaurants,
+    recalculate_restaurant_stats, search_restaurants,
+)
 
-@pytest.fixture
-def auth_client(api_client):
-    user = User.objects.create_user(username="testuser", email="test@mail.com", password="pwd")
-    response = api_client.post(reverse('token_obtain_pair'), {"email": "test@mail.com", "password": "pwd"})
-    token = response.data['access']
-    api_client.credentials(HTTP_AUTHORIZATION=f'Bearer {token}')
-    return api_client, user
 
-@pytest.fixture
-def staff_client():
-    client = APIClient()
-    user = User.objects.create_user(username="staffuser", email="staff@mail.com", password="pwd", is_staff=True)
-    response = client.post(reverse('token_obtain_pair'), {"email": "staff@mail.com", "password": "pwd"})
-    client.credentials(HTTP_AUTHORIZATION=f'Bearer {response.data["access"]}')
-    return client
+class TestAddressNormalization:
+    """«ул. Пушкина, д. 10» и «Пушкина 10» — один адрес, иначе будут два заведения."""
 
-@pytest.mark.django_db
-class TestRestaurantsViews:
-    
-    def test_restaurant_search(self, auth_client):
+    @pytest.mark.parametrize('address', [
+        'ул. Пушкина, д. 10',
+        'улица Пушкина 10',
+        'Пушкина, 10',
+        'УЛ ПУШКИНА Д.10',
+        'Пушкина 10',
+        '10 Пушкина',
+    ])
+    def test_variants_collapse_to_one_key(self, address):
+        assert normalize_address(address) == '10 пушкина'
+
+    def test_street_type_distinguishes_addresses(self):
         """
-        Тест: Поиск ресторана по названию
+        «Улица» отбрасывается — её опускают постоянно. А «проспект» и «переулок»
+        нет: склеить «улицу Ленина» с «проспектом Ленина» хуже, чем оставить дубль.
         """
-        client, _ = auth_client
-        Restaurant.objects.create(name="McDonalds", address="Lenina 1")
-        Restaurant.objects.create(name="KFC", address="Lenina 2")
-        
-        url = reverse('restaurant-list')
-        
-        # Запрос без поиска - отдает все
-        res_all = client.get(url)
-        assert res_all.status_code == 200
-        assert len(res_all.data['results']) == 2
-        
-        # Поиск по имени
-        res_search = client.get(f"{url}?search=McDonalds")
-        assert res_search.status_code == 200
-        assert len(res_search.data['results']) == 1
-        assert res_search.data['results'][0]['name'] == "McDonalds"
+        assert normalize_address('улица Ленина 10') != normalize_address('проспект Ленина 10')
+        assert normalize_address('проспект Ленина 10') == normalize_address('пр-т Ленина 10')
+        assert normalize_address('переулок Ленина 10') != normalize_address('улица Ленина 10')
 
-    def test_dish_search_by_restaurant(self, auth_client):
-        """
-        Тест: Получение списка блюд конкретного ресторана и поиск по ним
-        """
-        client, _ = auth_client
-        r1 = Restaurant.objects.create(name="R1", address="A1")
-        r2 = Restaurant.objects.create(name="R2", address="A2")
-        
-        Dish.objects.create(name="Pizza", restaurant=r1)
-        Dish.objects.create(name="Pasta", restaurant=r1)
-        Dish.objects.create(name="Sushi", restaurant=r2)
-        
-        url = reverse('dish-list')
-        
-        # Фильтрация по ресторану
-        res_r1 = client.get(f"{url}?restaurant_id={r1.id}")
-        assert res_r1.status_code == 200
-        assert len(res_r1.data['results']) == 2
-        
-        # Поиск внутри ресторана
-        res_r1_search = client.get(f"{url}?restaurant_id={r1.id}&search=Pizza")
-        assert res_r1_search.status_code == 200
-        assert len(res_r1_search.data['results']) == 1
-        assert res_r1_search.data['results'][0]['name'] == "Pizza"
+    def test_name_normalization_ignores_case_punctuation_and_yo(self):
+        assert normalize_name('Чиз Бургер!') == normalize_name('чиз  бургер')
+        assert normalize_name('Тёплый') == normalize_name('Теплый')
 
 
 @pytest.mark.django_db
-class TestCategoryViews:
+class TestDeduplication:
+    def test_same_place_written_differently_is_one_record(self, restaurant):
+        found = find_exact('Кофемания', 'Пушкина 10', 'Москва')
+        assert found == restaurant
 
-    def test_list_categories_authenticated(self, auth_client):
-        """Авторизованный пользователь получает список категорий (сиды + созданные)."""
-        client, _ = auth_client
-        Category.objects.create(name="Суши")
-        Category.objects.create(name="Паста")
-
-        response = client.get(reverse('category-list'))
-        assert response.status_code == 200
-        names = {item['name'] for item in response.data['results']}
-        # Созданные в тесте видны вместе с засеянными справочными категориями
-        assert {"Суши", "Паста"} <= names
-        assert "Фастфуд" in names  # из сид-миграции
-
-    def test_list_categories_unauthenticated(self, api_client):
-        """
-        R7-fix: каталог категорий публичный (anon-юзер должен видеть
-        категории на /search и /categories страницах без логина).
-        """
-        Category.objects.create(name="Суши")
-        Category.objects.create(name="Паста")
-        response = api_client.get(reverse('category-list'))
-        assert response.status_code == 200
-        # Сид-миграция 0019 добавляет базовые категории, поэтому проверяем
-        # вхождение созданных, а не точное количество.
-        names = {c['name'] for c in response.data['results']}
-        assert {"Суши", "Паста"} <= names
-
-    def test_retrieve_category(self, auth_client):
-        """Авторизованный пользователь может получить категорию по id."""
-        client, _ = auth_client
-        category = Category.objects.create(name="Молекулярная кухня")
-
-        response = client.get(reverse('category-detail', kwargs={'pk': category.pk}))
-        assert response.status_code == 200
-        assert response.data['name'] == "Молекулярная кухня"
-
-    def test_search_categories(self, auth_client):
-        """Поиск категорий по имени работает."""
-        client, _ = auth_client
-        Category.objects.create(name="Бургеры")
-        Category.objects.create(name="Пицца")
-
-        response = client.get(f"{reverse('category-list')}?search=Бургер")
-        assert response.status_code == 200
-        assert len(response.data['results']) == 1
-        assert response.data['results'][0]['name'] == "Бургеры"
-
-    def test_create_category_staff_only(self, staff_client):
-        """Стаф может создать категорию."""
-        response = staff_client.post(reverse('category-list'), {'name': 'Веганское'})
-        assert response.status_code == 201
-        assert Category.objects.filter(name='Веганское').exists()
-
-    def test_create_category_forbidden_for_regular_user(self, auth_client):
-        """Обычный пользователь не может создать категорию — 403."""
-        client, _ = auth_client
-        response = client.post(reverse('category-list'), {'name': 'Запрещённая'})
-        assert response.status_code == 403
-
-    def test_update_category_staff_only(self, staff_client):
-        """Стаф может обновить категорию."""
-        category = Category.objects.create(name="Старое название")
-        response = staff_client.patch(
-            reverse('category-detail', kwargs={'pk': category.pk}),
-            {'name': 'Новое название'},
-            format='json'
+    def test_get_or_create_does_not_duplicate(self, restaurant):
+        again, created = get_or_create_restaurant(
+            name='Кофемания', address='улица Пушкина 10', city='Москва',
         )
-        assert response.status_code == 200
-        category.refresh_from_db()
-        assert category.name == 'Новое название'
+        assert again == restaurant
+        assert created is False
+        assert Restaurant.objects.count() == 1
 
-    def test_update_category_forbidden_for_regular_user(self, auth_client):
-        """Обычный пользователь не может изменить категорию — 403."""
-        client, _ = auth_client
-        category = Category.objects.create(name="Нетронь")
-        response = client.patch(
-            reverse('category-detail', kwargs={'pk': category.pk}),
-            {'name': 'Взлом'},
-            format='json'
+    def test_same_name_different_address_are_different_places(self, restaurant):
+        """Пятьдесят «Шоколадниц» на разных улицах — пятьдесят заведений."""
+        other, created = get_or_create_restaurant(
+            name='Кофемания', address='Тверская 25', city='Москва',
         )
-        assert response.status_code == 403
+        assert created is True
+        assert other != restaurant
 
-    def test_delete_category_staff_only(self, staff_client):
-        """Стаф может удалить категорию."""
-        category = Category.objects.create(name="Удалить меня")
-        response = staff_client.delete(reverse('category-detail', kwargs={'pk': category.pk}))
-        assert response.status_code == 204
-        assert not Category.objects.filter(pk=category.pk).exists()
+    def test_same_address_different_city_are_different_places(self, restaurant):
+        other, created = get_or_create_restaurant(
+            name='Кофемания', address='Пушкина 10', city='Казань',
+        )
+        assert created is True
+        assert Restaurant.objects.count() == 2
 
-    def test_delete_category_forbidden_for_regular_user(self, auth_client):
-        """Обычный пользователь не может удалить категорию — 403."""
-        client, _ = auth_client
-        category = Category.objects.create(name="Важная")
-        response = client.delete(reverse('category-detail', kwargs={'pk': category.pk}))
-        assert response.status_code == 403
+    def test_similar_name_and_address_flagged_as_duplicate(self, restaurant):
+        assert find_possible_duplicates('Кафе Кофемания', 'Пушкина 10', 'Москва').exists()
 
-
-@pytest.mark.django_db
-class TestRestaurantNameNormalization:
-
-    def test_restaurant_name_strips_whitespace(self, auth_client):
-        """
-        Названия ресторанов с пробелами по краям не дублируются.
-        '  KFC  ' и 'KFC' должны указывать на один и тот же ресторан.
-        """
-        client, _ = auth_client
-        url = reverse('post-list')
-
-        burger_type_id = DishType.objects.get(name='Бургер').id
-        data1 = {
-            "restaurant_name": "KFC",
-            "restaurant_address": "Lenina 1",
-            "dish_name": "Burger",
-            "dish_type_id": burger_type_id,
-            "description": "Tasty",
-            "rating": 8.0,
-        }
-        data2 = {
-            "restaurant_name": "  KFC  ",
-            "restaurant_address": "Lenina 1",
-            "dish_name": "Chicken",
-            "dish_type_id": burger_type_id,
-            "description": "Good",
-            "rating": 7.0,
-        }
-
-        client.post(url, data1)
-        client.post(url, data2)
-
-        assert Restaurant.objects.filter(name="KFC").count() == 1
+    def test_similar_name_but_far_address_is_not_duplicate(self, restaurant):
+        assert not find_possible_duplicates('Кофемания', 'Тверская 25', 'Москва').exists()
 
 
 @pytest.mark.django_db
-class TestCommentsOnNonApprovedPosts:
+class TestSuggestions:
+    def test_search_finds_by_typo(self, restaurant):
+        assert restaurant in search_restaurants('кафемания', city='Москва')
 
-    def test_owner_can_get_comments_on_pending_post(self, auth_client):
-        """CR3-фикс: владелец поста может просматривать свои pending-посты (и их комментарии)."""
-        client, user = auth_client
-        restaurant = Restaurant.objects.create(name="R", address="A")
-        dish = Dish.objects.create(name="d", restaurant=restaurant)
-        post = Post.objects.create(user=user, dish=dish, status=Post.STATUS_PENDING)
+    def test_search_finds_by_prefix(self, restaurant):
+        assert restaurant in search_restaurants('кофе', city='Москва')
 
-        response = client.get(reverse('post-comments', kwargs={'pk': post.pk}))
-        assert response.status_code == 200
+    def test_search_ignores_other_cities(self, restaurant):
+        assert restaurant not in search_restaurants('Кофемания', city='Казань')
 
-    def test_other_user_cannot_get_comments_on_pending_post(self, auth_client, api_client):
-        """Чужой pending-пост по-прежнему возвращает 404 для не-владельца."""
-        _, owner = auth_client
-        restaurant = Restaurant.objects.create(name="R3", address="A3")
-        dish = Dish.objects.create(name="d3", restaurant=restaurant)
-        post = Post.objects.create(user=owner, dish=dish, status=Post.STATUS_PENDING)
 
-        # Создаём другого пользователя и логинимся
-        from django.contrib.auth import get_user_model
-        User = get_user_model()
-        other = User.objects.create_user(email="other@test.com", password="pwd", username="other")
-        api_client.force_authenticate(user=other)
-        response = api_client.get(reverse('post-comments', kwargs={'pk': post.pk}))
-        assert response.status_code == 404
+@pytest.mark.django_db
+class TestConfirmation:
+    """
+    Заведение подтверждается, когда о нём написали двое разных людей.
+    Выдуманное место так и остаётся с одним постом и в каталог не попадает.
+    """
 
-    def test_owner_can_get_comments_on_rejected_post(self, auth_client):
-        """CR3-фикс: владелец поста может просматривать свои rejected-посты (и их комментарии)."""
-        client, user = auth_client
-        restaurant = Restaurant.objects.create(name="R2", address="A2")
-        dish = Dish.objects.create(name="d2", restaurant=restaurant)
-        post = Post.objects.create(user=user, dish=dish, status=Post.STATUS_REJECTED)
+    def test_new_restaurant_is_not_confirmed(self, restaurant):
+        assert restaurant.is_confirmed is False
 
-        response = client.get(reverse('post-comments', kwargs={'pk': post.pk}))
-        assert response.status_code == 200
+    def test_two_different_authors_confirm(self, restaurant, author, other_author,
+                                           make_post, moderator):
+        from posts.services.moderation import approve_post
+
+        approve_post(make_post(author, restaurant=restaurant), moderator)
+        restaurant.refresh_from_db()
+        assert restaurant.is_confirmed is False, 'одного автора мало'
+
+        approve_post(make_post(other_author, restaurant=restaurant, item='Латте'), moderator)
+        restaurant.refresh_from_db()
+        assert restaurant.is_confirmed is True
+
+    def test_same_author_twice_does_not_confirm(self, restaurant, author, make_post, moderator):
+        from posts.services.moderation import approve_post
+
+        approve_post(make_post(author, restaurant=restaurant), moderator)
+        approve_post(make_post(author, restaurant=restaurant, item='Латте'), moderator)
+        recalculate_restaurant_stats(restaurant)
+        restaurant.refresh_from_db()
+        assert restaurant.contributors_count == 1
+        assert restaurant.is_confirmed is False
+
+
+@pytest.mark.django_db
+class TestMerge:
+    """
+    Слияние удаляет дубль по-настоящему: ценность заведения в его позициях
+    и постах, а они переезжают. Но написание остаётся синонимом — так каждое
+    слияние учит поиск.
+    """
+
+    def test_duplicate_record_is_deleted(self, restaurant):
+        duplicate = Restaurant.objects.create(
+            name='Кафе Кофемания', address='Пушкина 10к1', city='Москва',
+        )
+        merge_restaurants(duplicate, restaurant)
+        assert not Restaurant.objects.filter(pk=duplicate.pk).exists()
+        assert Restaurant.objects.count() == 1
+
+    def test_spelling_is_kept_as_alias_and_found_by_search(self, restaurant):
+        duplicate = Restaurant.objects.create(
+            name='Кафе Кофемания', address='Пушкина 10к1', city='Москва',
+        )
+        merge_restaurants(duplicate, restaurant)
+
+        assert RestaurantAlias.objects.filter(restaurant=restaurant,
+                                              name='Кафе Кофемания').exists()
+        assert restaurant in search_restaurants('Кафе Кофемания', city='Москва')
+
+    def test_menu_items_move_to_survivor(self, restaurant):
+        duplicate = Restaurant.objects.create(
+            name='Кафе Кофемания', address='Пушкина 10к1', city='Москва',
+        )
+        MenuItem.objects.create(restaurant=duplicate, name='Латте')
+        merge_restaurants(duplicate, restaurant)
+
+        assert MenuItem.objects.filter(restaurant=restaurant, name='Латте').exists()
+
+    def test_same_named_items_are_merged_together(self, restaurant):
+        """У выжившего уже есть такое блюдо — сливаются и позиции тоже."""
+        duplicate = Restaurant.objects.create(
+            name='Кафе Кофемания', address='Пушкина 10к1', city='Москва',
+        )
+        MenuItem.objects.create(restaurant=restaurant, name='Латте')
+        MenuItem.objects.create(restaurant=duplicate, name='латте')
+
+        merge_restaurants(duplicate, restaurant)
+        assert MenuItem.objects.filter(restaurant=restaurant).count() == 1
