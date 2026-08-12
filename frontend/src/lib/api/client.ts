@@ -226,3 +226,14 @@ export const rejectModerationPost = (id: number, reason: string) =>
         method: "POST",
         body: JSON.stringify({ reason }),
     });
+
+// --- Подписки -------------------------------------------------------------
+
+/**
+ * Подписаться и отписаться — одна ручка, POST и DELETE.
+ * POST идемпотентен: `created` отличает «только что подписался» от «уже был».
+ */
+export const toggleSubscription = (userId: number, active: boolean) =>
+    request<{ status: string; created?: boolean }>(endpoints.subscribe(userId), {
+        method: active ? "POST" : "DELETE",
+    });

@@ -67,6 +67,24 @@ export interface MenuItemDetail extends MenuItem {
     brand_rating: BrandRating | null;
 }
 
+/** Профиль пользователя. */
+export interface UserProfile {
+    id: number;
+    username: string;
+    email?: string;
+    full_name: string;
+    bio_text: string;
+    avatar: string | null;
+    birth_date: string | null;
+    city: string;
+    date_joined: string;
+    is_staff: boolean;
+    posts_count: number;
+    followers_count: number;
+    following_count: number;
+    is_following: boolean;
+}
+
 export interface PostAuthor {
     id: number;
     username: string;

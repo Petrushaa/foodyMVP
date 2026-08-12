@@ -11,7 +11,7 @@
 import { auth } from "@/auth";
 import type {
     DishType, MenuItem, MenuItemDetail, ModerationPost, ModerationStats,
-    Paginated, Post, Restaurant, Taxon,
+    Paginated, Post, Restaurant, Taxon, UserProfile,
 } from "@/lib/types";
 import { type CatalogFilters, type FeedParams, endpoints } from "./endpoints";
 
@@ -114,3 +114,9 @@ export const fetchModerationQueue = (kind?: string, page?: number) =>
 
 export const fetchModerationStats = () =>
     serverFetch<ModerationStats>(endpoints.moderationStats());
+
+// --- Пользователи ---------------------------------------------------------
+
+export const fetchMe = () => serverFetch<UserProfile>(endpoints.me());
+
+export const fetchUser = (id: number) => serverFetch<UserProfile>(endpoints.user(id));

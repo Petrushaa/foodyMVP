@@ -3,8 +3,10 @@ import { NextResponse } from "next/server";
 
 // Роуты, требующие входа (auth-редирект на /login).
 const PROTECTED = [
-  /^\/me(\/|$)/,
-  /^\/profile(\/|$)/,
+  // Свой профиль и его редактирование — только для вошедших. Чужие профили
+  // (/profile/<id>) открыты гостям: по таким ссылкам и делятся.
+  /^\/profile$/,
+  /^\/profile\/edit$/,
   /^\/saved$/,
   /^\/create$/,
   /^\/settings(\/|$)/,

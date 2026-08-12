@@ -10,7 +10,7 @@ export default function MainLayout({
 }) {
   return (
     <>
-      <BackgroundBlobs palette={DEFAULT_TWEAKS.palette} />
+      <BackgroundBlobs />
       {/* Десктоп: левая навигация (на мобиле скрыта). */}
       <DesktopSidebar />
       {/* Колонка контента: на мобиле = вся рамка (absolute inset-0, как раньше),
