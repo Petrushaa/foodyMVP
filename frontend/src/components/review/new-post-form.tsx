@@ -11,16 +11,17 @@
  * можно отдельной кнопкой.
  */
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { MenuItemPicker, type MenuItemChoice } from "@/components/review/menu-item-picker";
+import { PhotoPicker } from "@/components/review/photo-picker";
 import { RestaurantPicker, type RestaurantChoice } from "@/components/review/restaurant-picker";
 import { ApiError, createPost } from "@/lib/api/client";
 
 const MAX_PHOTOS = 10;
 const MAX_TAGS = 10;
-/** Оценка на бэкенде 0–10; в интерфейсе показываем пять звёзд с половинками. */
+/** Шкала оценки на бэкенде — 0–10, её и показываем. */
 const MAX_RATING = 10;
 
 export function NewPostForm({ defaultCity = "" }: { defaultCity?: string }) {
@@ -44,16 +45,6 @@ export function NewPostForm({ defaultCity = "" }: { defaultCity?: string }) {
 
     const restaurantId = restaurant?.kind === "existing" ? restaurant.restaurant.id : null;
     const canSubmit = Boolean(restaurant && menuItem && rating > 0 && !isSubmitting);
-
-    const previews = useMemo(
-        () => photos.map((file) => ({ file, url: URL.createObjectURL(file) })),
-        [photos],
-    );
-
-    function addPhotos(files: FileList | null) {
-        if (!files) return;
-        setPhotos((current) => [...current, ...Array.from(files)].slice(0, MAX_PHOTOS));
-    }
 
     function addTag() {
         const tag = tagDraft.trim().toLowerCase().replace(/^#/, "");
@@ -177,31 +168,7 @@ export function NewPostForm({ defaultCity = "" }: { defaultCity?: string }) {
 
             <section className="space-y-3">
                 <h2 className="text-lg font-semibold">Фотографии</h2>
-                <input
-                    type="file"
-                    accept="image/*"
-                    multiple
-                    onChange={(event) => addPhotos(event.target.files)}
-                    className="block w-full text-sm"
-                />
-                {previews.length > 0 && (
-                    <div className="flex flex-wrap gap-2">
-                        {previews.map(({ url }, index) => (
-                            <div key={url} className="relative">
-                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={url} alt="" className="h-20 w-20 rounded-xl object-cover" />
-                                <button
-                                    type="button"
-                                    onClick={() => setPhotos(photos.filter((_, i) => i !== index))}
-                                    className="absolute -right-1 -top-1 h-5 w-5 rounded-full bg-neutral-900 text-xs text-white"
-                                >
-                                    ×
-                                </button>
-                            </div>
-                        ))}
-                    </div>
-                )}
-                <p className="text-xs text-neutral-400">Не больше {MAX_PHOTOS} фотографий</p>
+                <PhotoPicker photos={photos} onChange={setPhotos} max={MAX_PHOTOS} />
             </section>
 
             <section className="space-y-3">
