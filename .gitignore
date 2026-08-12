@@ -45,3 +45,4 @@ backend/.pytest_cache/
 backend/static/
 frontend-foody-front.bak/
 .claude/scheduled_tasks.lock
+.dev-media/

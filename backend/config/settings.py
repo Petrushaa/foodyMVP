@@ -173,8 +173,11 @@ AUTHENTICATION_BACKENDS = [
 ]
 
 # Media Settings (for Avatars & Posts)
+# Путь переопределяется через MEDIA_ROOT: в контейнере это примонтированный том,
+# а при локальном запуске каталог backend/media принадлежит root (его создал Docker),
+# и Django в него писать не может — тогда указываем свой.
 MEDIA_URL = '/media/'
-MEDIA_ROOT = BASE_DIR / 'media'
+MEDIA_ROOT = Path(os.environ.get('MEDIA_ROOT') or (BASE_DIR / 'media'))
 
 # CORS Config
 _cors_origins = os.environ.get('CORS_ALLOWED_ORIGINS', 'http://localhost:3000,http://localhost:5173')
