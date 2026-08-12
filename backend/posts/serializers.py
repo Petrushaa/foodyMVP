@@ -415,8 +415,14 @@ class PostCreateSerializer(serializers.ModelSerializer):
             possible_duplicate=flags['possible_duplicate'],
             looks_suspicious=flags['looks_suspicious'],
             proposed_price=price,
+            # «Предложение цены» — только когда позиция уже существует и автор
+            # заявляет, что цена изменилась. У новой позиции цена первичная,
+            # решать по ней отдельно нечего — иначе счётчик правок цен в очереди
+            # модерации считал бы каждую новую позицию.
             proposed_price_status=(
-                Post.PRICE_PROPOSAL_PENDING if price is not None else Post.PRICE_PROPOSAL_NONE
+                Post.PRICE_PROPOSAL_PENDING
+                if price is not None and validated_data.get('menu_item')
+                else Post.PRICE_PROPOSAL_NONE
             ),
             **validated_data,
         )

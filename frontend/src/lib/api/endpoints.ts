@@ -82,12 +82,11 @@ export const endpoints = {
 
     // --- Заведения ---
     /**
-     * Подсказки заведений. `ll` — центр поиска «долгота,широта».
-     * Передавать обязательно: без окна поиска Яндекс отдаёт результаты по всей
-     * стране, и человек в Москве получит кофейни из Санкт-Петербурга.
+     * Подсказки заведений из нашего справочника. Город сужает выдачу —
+     * передавать его стоит всегда, когда он известен.
      */
-    placeSuggest: (text: string, ll?: string, spn?: string) =>
-        `/places/suggest${query({ text, ll, spn })}`,
+    placeSuggest: (text: string, city?: string) =>
+        `/places/suggest${query({ text, city })}`,
     placeNotFound: () => "/places/not-found",
 
     // --- Модерация ---

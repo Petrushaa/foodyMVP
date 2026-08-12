@@ -31,8 +31,11 @@ export interface Restaurant {
     address: string;
     city: string;
     is_closed: boolean;
-    /** Кнопка «Открыть в Картах» — обязательна по условиям использования API Яндекса. */
-    maps_url: string;
+    posts_count: number;
+    /** Сколько разных людей о нём писали. */
+    contributors_count: number;
+    /** Подтверждено, когда написали двое разных. Неподтверждённые не в каталоге. */
+    is_confirmed: boolean;
 }
 
 export interface MenuItem {
@@ -62,7 +65,6 @@ export interface MenuItemDetail extends MenuItem {
     /** Только теги, которые написали несколько разных людей. */
     tags: Array<{ id: number; name: string; mentions: number }>;
     brand_rating: BrandRating | null;
-    maps_url: string;
 }
 
 export interface PostAuthor {
@@ -120,28 +122,33 @@ export interface Comment {
     is_editable: boolean;
 }
 
-/** Подсказка заведения от Яндекса. Выбрать место можно только отсюда или на карте. */
+/**
+ * Подсказка заведения из нашего справочника.
+ *
+ * Главная защита от дублей: человек видит, что место уже заведено, и выбирает его.
+ * Поэтому рядом с названием обязательно показываем адрес и число постов — рядом
+ * с «Кофемания, Пушкина 10 · 24 поста» дубль с одним постом никто не выберет.
+ */
 export interface PlaceSuggestion {
-    external_id: string;
+    id: number;
     name: string;
     address: string;
     city: string;
-    subtitle: string;
-    categories: string[];
-    maps_url: string;
-    /** Заполнено, если заведение уже есть у нас: можно сразу показать его позиции. */
-    known_restaurant_id: number | null;
+    posts_count: number;
+    contributors_count: number;
+    is_confirmed: boolean;
 }
 
 /** Что появится в каталоге, если модератор одобрит пост. */
 export interface ModerationPreview {
     restaurant: {
+        id: number | null;
         name: string;
         address: string;
         city: string;
-        external_id: string;
-        maps_url: string | null;
+        /** Новое заведение — на него модератор смотрит внимательнее всего. */
         is_new: boolean;
+        posts_count: number;
     };
     menu_item: {
         name: string;
@@ -165,7 +172,16 @@ export interface ModerationPost {
     will_create: ModerationPreview | null;
     /** Похожие позиции в том же заведении — подсказка «может, это дубль?». */
     similar_menu_items: Array<{ id: number; name: string; similarity: number }>;
+    /** Похожие заведения — ответ на попытку обойти подсказки. */
+    similar_restaurants: Array<{
+        id: number; name: string; address: string;
+        posts_count: number; similarity: number;
+    }>;
     price_change: { current: string | null; proposed: string } | null;
+    /** Человекочитаемые причины пометок — модератору сразу текстом. */
+    warnings: string[];
+    possible_duplicate: boolean;
+    looks_suspicious: boolean;
 }
 
 export interface ModerationStats {
@@ -173,6 +189,7 @@ export interface ModerationStats {
     new_items: number;
     price_changes: number;
     waiting_over_day: number;
+    suspicious: number;
 }
 
 export interface Paginated<T> {

@@ -135,13 +135,13 @@ export const getTaxons = (kind?: string) => request<Taxon[]>(endpoints.taxons(ki
 // --- Заведения ------------------------------------------------------------
 
 /**
- * Подсказки заведений при вводе. `ll` — «долгота,широта» центра поиска.
+ * Подсказки заведений при вводе — из нашего справочника.
  *
- * Вызывать не чаще, чем нужно: у Геосаджеста 1000 запросов в сутки на весь сервис.
- * Минимум 3 символа и задержка после ввода — обязательны.
+ * Это главная защита от дублей: увидев, что место уже заведено, человек выберет
+ * его, а не создаст второе. Поэтому подсказки надо показывать заметно и рано.
  */
-export const suggestPlaces = (text: string, ll?: string, spn?: string) =>
-    request<PlaceSuggestion[]>(endpoints.placeSuggest(text, ll, spn));
+export const suggestPlaces = (text: string, city?: string) =>
+    request<PlaceSuggestion[]>(endpoints.placeSuggest(text, city));
 
 /** «Не нашёл своё место» — копим то, что люди не смогли найти на карте. */
 export const reportPlaceNotFound = (query: string, comment: string) =>
@@ -155,13 +155,12 @@ export const reportPlaceNotFound = (query: string, comment: string) =>
 export interface CreatePostInput {
     /** Либо выбрана существующая позиция… */
     menuItemId?: number;
-    /** …либо заявка на новую: заведение с карты + название + тип блюда. */
-    restaurantExternalId?: string;
+    /** …либо заявка на новую. Заведение: выбранное из подсказок… */
+    restaurantId?: number;
+    /** …либо введённое руками — тогда нужны все три поля. */
     restaurantName?: string;
     restaurantAddress?: string;
     restaurantCity?: string;
-    restaurantLatitude?: number;
-    restaurantLongitude?: number;
     menuItemName?: string;
     dishTypeId?: number;
     taxonIds?: number[];
@@ -182,12 +181,10 @@ export async function createPost(input: CreatePostInput) {
     };
 
     put("menu_item_id", input.menuItemId);
-    put("restaurant_external_id", input.restaurantExternalId);
+    put("restaurant_id", input.restaurantId);
     put("restaurant_name", input.restaurantName);
     put("restaurant_address", input.restaurantAddress);
     put("restaurant_city", input.restaurantCity);
-    put("restaurant_latitude", input.restaurantLatitude);
-    put("restaurant_longitude", input.restaurantLongitude);
     put("menu_item_name", input.menuItemName);
     put("dish_type_id", input.dishTypeId);
     put("author_rating", input.authorRating);
