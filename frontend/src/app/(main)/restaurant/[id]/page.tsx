@@ -1,66 +1,89 @@
+import { auth } from "@/auth";
 import Link from "next/link";
-import { notFound } from "next/navigation";
+import { ArrowLeft, MapPin } from "lucide-react";
+import { apiRequest } from "@/lib/api";
+import { GlassSurface } from "@/components/feed/glass-surface";
 
-import { endpoints } from "@/lib/api/endpoints";
-import { tryFetch } from "@/lib/api/server";
-import type { MenuItem, Paginated, Restaurant } from "@/lib/types";
+export default async function RestaurantPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const session = (await auth()) as any;
+  const accessToken: string | null = session?.user?.accessToken ?? null;
 
-export const dynamic = "force-dynamic";
+  let restaurant: any = null;
+  try {
+    const options: any = { headers: {} };
+    if (accessToken) options.headers.Authorization = `Bearer ${accessToken}`;
+    restaurant = await apiRequest(`/restaurants/${id}/`, options);
+  } catch {
+    /* not found */
+  }
 
-/** Страница заведения: адрес и его блюда, лучшие сверху. Открыта гостям. */
-export default async function RestaurantPage(props: { params: Promise<{ id: string }> }) {
-  const { id } = await props.params;
-  const restaurantId = Number(id);
+  if (!restaurant) {
+    return (
+      <main className="absolute inset-0 overflow-hidden">
+        <div className="absolute inset-0 flex flex-col px-4 pt-16 pb-25">
+          <GlassSurface className="flex flex-1 items-center justify-center rounded-[26px] border border-white/65 bg-white/45">
+            <div className="max-w-[260px] px-6 text-center">
+              <p className="text-[20px] font-extrabold text-[#15291C]">Заведение не найдено</p>
+            </div>
+          </GlassSurface>
+        </div>
+      </main>
+    );
+  }
 
-  const [restaurant, menu] = await Promise.all([
-    tryFetch<Restaurant>(endpoints.restaurant(restaurantId)),
-    tryFetch<Paginated<MenuItem>>(endpoints.restaurantMenu(restaurantId)),
-  ]);
-
-  if (!restaurant) notFound();
+  const categories: string[] = (restaurant.categories || [])
+    .map((c: any) => (typeof c === "string" ? c : c?.name))
+    .filter(Boolean);
 
   return (
-    <div className="pb-10">
-      <header className="border-b border-neutral-100 px-4 py-5">
-        <h1 className="text-xl font-semibold">{restaurant.name}</h1>
-        <p className="mt-1 text-sm text-neutral-500">
-          {restaurant.address}
-          {restaurant.city && ` · ${restaurant.city}`}
-        </p>
-        {restaurant.is_closed && (
-          <p className="mt-2 rounded-xl bg-neutral-100 px-3 py-2 text-sm text-neutral-600">
-            Заведение закрылось. Посты о нём остаются — история никуда не девается.
-          </p>
-        )}
-      </header>
+    <main className="absolute inset-0 overflow-hidden">
+      <div className="absolute inset-0 flex flex-col pt-2">
+        <header className="mb-2 flex items-center gap-3 px-5">
+          <Link
+            href="/search"
+            aria-label="Назад"
+            className="grid size-9 place-items-center rounded-full border border-white/65 bg-white/58 text-[#15291C] shadow-[0_8px_20px_rgba(20,40,28,0.14),inset_1px_1px_0_rgba(255,255,255,0.86)] backdrop-blur-[18px]"
+          >
+            <ArrowLeft className="size-[18px]" strokeWidth={2.35} />
+          </Link>
+          <h1 className="text-[20px] font-extrabold tracking-[-0.3px] text-[#15291C]">
+            Заведение
+          </h1>
+        </header>
 
-      <ul>
-        {(menu?.results ?? []).map((item) => (
-          <li key={item.id} className="border-b border-neutral-100">
-            <Link href={`/menu-item/${item.id}`} className="flex items-center gap-4 px-4 py-4">
-              <span className="min-w-0 flex-1">
-                <span className="block truncate font-medium">{item.name}</span>
-                <span className="block text-sm text-neutral-400">
-                  {item.ratings_count > 0
-                    ? `${item.rating_raw.toFixed(1)} / 10 · ${item.ratings_count} оценок`
-                    : "Пока без оценок"}
-                </span>
-              </span>
-              {item.price && (
-                <span className="shrink-0 text-sm text-neutral-500">
-                  {Math.round(Number(item.price))} ₽
-                </span>
-              )}
-            </Link>
-          </li>
-        ))}
-      </ul>
+        <div className="hide-scroll flex-1 overflow-y-auto px-4 pb-25 pt-2">
+          <GlassSurface className="rounded-[26px] border border-white/65 bg-white/45 px-5 py-6 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
+            <h2 className="text-[26px] font-extrabold tracking-[-0.3px] text-[#15291C]">
+              {restaurant.name}
+            </h2>
 
-      {(menu?.results?.length ?? 0) === 0 && (
-        <p className="px-4 py-16 text-center text-sm text-neutral-400">
-          Про блюда этого заведения ещё никто не написал
-        </p>
-      )}
-    </div>
+            {restaurant.address && (
+              <div className="mt-2 flex items-center gap-1.5 text-[14px] font-medium text-[#5C6B62]">
+                <MapPin className="size-4" strokeWidth={2} />
+                <span>{restaurant.address}</span>
+              </div>
+            )}
+
+            {categories.length > 0 && (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {categories.map((c) => (
+                  <span
+                    key={c}
+                    className="rounded-full border border-white/65 bg-white/55 px-3 py-1 text-[12.5px] font-semibold text-[#15291C] shadow-[inset_1px_1px_0_rgba(255,255,255,0.7)]"
+                  >
+                    {c}
+                  </span>
+                ))}
+              </div>
+            )}
+          </GlassSurface>
+        </div>
+      </div>
+    </main>
   );
 }

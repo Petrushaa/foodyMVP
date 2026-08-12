@@ -10,7 +10,7 @@ from rest_framework.routers import DefaultRouter
 from .views import (
     CommentLikeView, CommentViewSet, DishTypeListView, MenuItemViewSet, ModerationViewSet,
     PlaceNotFoundReportView, PlaceSuggestView, PostLikeView, PostSaveView, PostViewSet,
-    RestaurantViewSet, TaxonListView,
+    RestaurantViewSet, TagListView, TaxonListView,
 )
 
 router = DefaultRouter()
@@ -24,6 +24,7 @@ urlpatterns = [
     # Справочники для формы создания поста
     path('dish-types/', DishTypeListView.as_view(), name='dish-type-list'),
     path('taxons/', TaxonListView.as_view(), name='taxon-list'),
+    path('tags/', TagListView.as_view(), name='tag-list'),
     # Заведения: подсказки Яндекса и жалоба «не нашёл своё место»
     path('places/suggest/', PlaceSuggestView.as_view(), name='place-suggest'),
     path('places/not-found/', PlaceNotFoundReportView.as_view(), name='place-not-found'),

@@ -3,10 +3,8 @@ import { NextResponse } from "next/server";
 
 // Роуты, требующие входа (auth-редирект на /login).
 const PROTECTED = [
-  // Свой профиль и его редактирование — только для вошедших. Чужие профили
-  // (/profile/<id>) открыты гостям: по таким ссылкам и делятся.
-  /^\/profile$/,
-  /^\/profile\/edit$/,
+  /^\/me(\/|$)/,
+  /^\/profile(\/|$)/,
   /^\/saved$/,
   /^\/create$/,
   /^\/settings(\/|$)/,
@@ -18,17 +16,24 @@ const PROTECTED = [
 //   без nonce НЕ выполнится, чужие хосты скриптов заблокированы.
 // - object-src 'none', base-uri 'self', frame-ancestors 'none', form-action 'self'.
 function buildCsp(nonce: string) {
+  // В разработке React и Turbopack используют eval() для отладочных возможностей,
+  // а горячая перезагрузка держит ws-соединение. Без послаблений страница падает
+  // с ошибкой в консоли и не оживает. В сборке eval не используется — там строго.
+  const isDev = process.env.NODE_ENV !== "production";
+
   return [
     `default-src 'self'`,
     `base-uri 'self'`,
     `object-src 'none'`,
     `frame-ancestors 'none'`,
     `form-action 'self'`,
-    `script-src 'self' 'nonce-${nonce}'`,
+    isDev
+      ? `script-src 'self' 'nonce-${nonce}' 'unsafe-eval'`
+      : `script-src 'self' 'nonce-${nonce}'`,
     `style-src 'self' 'unsafe-inline'`,
     `img-src 'self' data: blob: https:`,
     `font-src 'self' data:`,
-    `connect-src 'self'`,
+    isDev ? `connect-src 'self' ws: wss:` : `connect-src 'self'`,
     `worker-src 'self' blob:`,
     `media-src 'self' blob: data:`,
   ].join("; ");

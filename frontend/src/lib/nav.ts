@@ -18,7 +18,7 @@ export const NAV_ITEMS: NavItem[] = [
   { id: "search", label: "Поиск", icon: Search, href: "/search" },
   { id: "add", label: "Создать пост", icon: Plus, primary: true, href: "/create" },
   { id: "saved", label: "Избранное", icon: Bookmark, href: "/saved" },
-  { id: "me", label: "Профиль", icon: User, href: "/profile" },
+  { id: "me", label: "Профиль", icon: User, href: "/me" },
 ];
 
 // Активен ли пункт для текущего пути.

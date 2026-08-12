@@ -87,7 +87,10 @@ class PostViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(saves__user=user)
 
         author = params.get('author')
-        if author:
+        if author == 'me' and user.is_authenticated:
+            # Удобный псевдоним: фронту не нужно сперва спрашивать свой id.
+            queryset = queryset.filter(user=user)
+        elif author and author.isdigit():
             queryset = queryset.filter(user_id=author)
 
         menu_item = params.get('menu_item')

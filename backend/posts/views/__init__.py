@@ -7,7 +7,8 @@
 
 from .actions import CommentLikeView, CommentViewSet, PostLikeView, PostSaveView
 from .catalog import (
-    DishTypeListView, MenuItemViewSet, PlaceSuggestView, RestaurantViewSet, TaxonListView,
+    DishTypeListView, MenuItemViewSet, PlaceSuggestView, RestaurantViewSet, TagListView,
+    TaxonListView,
 )
 from .moderation import ModerationViewSet
 from .posts import PlaceNotFoundReportView, PostViewSet
@@ -15,5 +16,5 @@ from .posts import PlaceNotFoundReportView, PostViewSet
 __all__ = [
     'PostViewSet', 'PlaceNotFoundReportView', 'ModerationViewSet',
     'MenuItemViewSet', 'RestaurantViewSet', 'DishTypeListView', 'TaxonListView',
-    'PlaceSuggestView', 'PostLikeView', 'PostSaveView', 'CommentViewSet', 'CommentLikeView',
+    'PlaceSuggestView', 'TagListView', 'PostLikeView', 'PostSaveView', 'CommentViewSet', 'CommentLikeView',
 ]

@@ -14,6 +14,7 @@
 from decimal import Decimal
 
 import bleach
+from django.contrib.postgres.search import TrigramSimilarity
 from django.conf import settings
 from django.db import transaction
 from django.utils import timezone
@@ -22,7 +23,7 @@ from rest_framework import serializers
 from .models import (
     MAX_IMAGES_PER_POST, MAX_TAGS_PER_POST, MAX_POSTS_PER_DAY, MIN_PRICE_CHANGE_RATIO,
     Comment, DishType, MenuItem, PlaceNotFoundReport, Post, PostImage, PostStatistics,
-    PostTag, Restaurant, Tag, Taxon,
+    PostTag, Restaurant, Tag, Taxon, normalize_name,
 )
 from .services.restaurants import find_exact, find_possible_duplicates
 from .services.text import check_address, check_name, is_definitely_garbage
@@ -222,6 +223,12 @@ class PostCreateSerializer(serializers.ModelSerializer):
         queryset=DishType.objects.all(), source='draft_dish_type',
         required=False, allow_null=True, write_only=True,
     )
+    # Название типа блюда вместо id. Интерфейс может показывать свой список
+    # с эмодзи и формулировками («Бургеры», «Суши и роллы»), а сопоставление
+    # с канонической записью справочника («Бургер», «Роллы») делает сервер.
+    dish_type_name = serializers.CharField(
+        max_length=100, required=False, allow_blank=True, write_only=True,
+    )
     taxon_ids = serializers.PrimaryKeyRelatedField(
         queryset=Taxon.objects.all(), many=True, required=False, write_only=True,
     )
@@ -248,7 +255,7 @@ class PostCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Post
         fields = [
-            'id', 'menu_item_id', 'menu_item_name', 'dish_type_id', 'taxon_ids',
+            'id', 'menu_item_id', 'menu_item_name', 'dish_type_id', 'dish_type_name', 'taxon_ids',
             'restaurant_id', 'restaurant_name', 'restaurant_address', 'restaurant_city',
             'description', 'size', 'author_rating', 'price', 'tags_list', 'uploaded_images',
         ]
@@ -296,7 +303,34 @@ class PostCreateSerializer(serializers.ModelSerializer):
 
     # --- перекрёстные проверки ---
 
+    def _resolve_dish_type(self, attrs):
+        """
+        Достаёт тип блюда по названию, если пришло оно, а не id.
+        Сначала точное совпадение по нормализованному имени, потом нечёткое —
+        «Бургеры» должно находить «Бургер».
+        """
+        name = (attrs.pop('dish_type_name', '') or '').strip()
+        if attrs.get('draft_dish_type') or not name:
+            return
+
+        normalized = normalize_name(name)
+        for candidate in DishType.objects.all():
+            if normalize_name(candidate.name) == normalized:
+                attrs['draft_dish_type'] = candidate
+                return
+
+        match = (
+            DishType.objects
+            .annotate(similarity=TrigramSimilarity('name', name))
+            .filter(similarity__gt=0.4)
+            .order_by('-similarity')
+            .first()
+        )
+        if match:
+            attrs['draft_dish_type'] = match
+
     def validate(self, attrs):
+        self._resolve_dish_type(attrs)
         user = self.context['request'].user
         menu_item = attrs.get('menu_item')
         name = (attrs.get('menu_item_name') or '').strip()

@@ -1,8 +1,12 @@
-/**
- * Плоский нейтральный фон под контентом. Раньше зависел от палитры —
- * сейчас нет, проп убран вместе со старым слоем данных.
- */
-export function BackgroundBlobs() {
+import type { Palette } from "@/lib/mock-data";
+
+type BackgroundBlobsProps = {
+  // Проп сохранён для обратной совместимости с местами вызова, но фон теперь
+  // плоский нейтральный и от палитры не зависит.
+  palette?: Palette;
+};
+
+export function BackgroundBlobs(_props: BackgroundBlobsProps) {
   return (
     <div
       aria-hidden="true"

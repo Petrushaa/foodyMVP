@@ -13,10 +13,10 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import DishType, MenuItem, Restaurant, Taxon
+from ..models import DishType, MenuItem, Restaurant, Tag, Taxon
 from ..serializers import (
     DishTypeSerializer, MenuItemDetailSerializer, MenuItemSerializer,
-    PostListSerializer, RestaurantSerializer, TaxonSerializer,
+    PostListSerializer, RestaurantSerializer, TagSerializer, TaxonSerializer,
 )
 from ..services.restaurants import search_restaurants
 from ..services.search import search_menu_items
@@ -42,6 +42,20 @@ class TaxonListView(ListAPIView):
         queryset = Taxon.objects.all()
         kind = self.request.query_params.get('kind')
         return queryset.filter(kind=kind) if kind else queryset
+
+
+class TagListView(ListAPIView):
+    """
+    Теги, отсортированные по популярности. Нужны блоку «популярные теги»
+    на странице поиска.
+    """
+
+    serializer_class = TagSerializer
+    permission_classes = [permissions.AllowAny]
+    pagination_class = None
+
+    def get_queryset(self):
+        return Tag.objects.filter(usage_count__gt=0).order_by('-usage_count')[:50]
 
 
 class PlaceSuggestView(APIView):

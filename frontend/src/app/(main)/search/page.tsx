@@ -1,11 +1,39 @@
-import { CatalogSearch } from "@/components/search/catalog-search";
-import { fetchTaxons } from "@/lib/api/server";
+import { auth } from "@/auth";
+import { SearchComposer } from "@/components/search/search-composer";
+import {
+  fetchPopularTags,
+  getCuisineCategories,
+  getDishCategories,
+  getPlaceCategories,
+} from "@/lib/categories";
+import type { CategoryGroups } from "@/components/search/results-category-control";
+import { DEFAULT_TWEAKS } from "@/lib/tweaks";
 
-export const dynamic = "force-dynamic";
-
-/** Поиск по каталогу. Открыт гостям: каталог блюд должен индексироваться. */
 export default async function SearchPage() {
-  // Категории всех четырёх осей приезжают одним запросом и не меняются часто.
-  const taxons = await fetchTaxons().catch(() => []);
-  return <CatalogSearch taxons={taxons} />;
+  const session = (await auth()) as any;
+  const accessToken: string | undefined = session?.user?.accessToken;
+
+  // Популярные теги из API (для экрана поиска, раздел «Популярное»).
+  const popularTags = await fetchPopularTags(accessToken, 12);
+
+  // Категории тремя группами (Блюда / Кухни / Формат) — заглушки на фронте.
+  const [dishes, cuisines] = await Promise.all([
+    getDishCategories(),
+    getCuisineCategories(),
+  ]);
+  const categoryGroups: CategoryGroups = {
+    dishes: dishes.map((c) => ({ id: `dish-${c.id}`, label: c.label, emoji: c.emoji })),
+    cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, label: c.label, emoji: c.emoji })),
+    formats: getPlaceCategories().map((c) => ({ id: `fmt-${c.id}`, label: c.label, emoji: c.emoji })),
+  };
+
+  return (
+    <main className="absolute inset-0 overflow-hidden">
+      <SearchComposer
+        brand={DEFAULT_TWEAKS.brand}
+        popularTags={popularTags}
+        categoryGroups={categoryGroups}
+      />
+    </main>
+  );
 }

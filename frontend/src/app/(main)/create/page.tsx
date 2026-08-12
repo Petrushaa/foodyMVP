@@ -1,14 +1,15 @@
+import { NewReviewForm } from "@/components/review/new-review-form";
+import { DEFAULT_TWEAKS } from "@/lib/tweaks";
+import { auth } from "@/auth";
 import { redirect } from "next/navigation";
 
-import { auth } from "@/auth";
-import { NewPostForm } from "@/components/review/new-post-form";
-
 export default async function CreatePage() {
-  const session = (await auth()) as { user?: { accessToken?: string; city?: string } } | null;
+  const session = (await auth()) as any;
   if (!session?.user?.accessToken) {
     redirect("/login");
   }
 
-  // Город из профиля сужает подсказки заведений и подставляется в форму нового места.
-  return <NewPostForm defaultCity={session.user.city ?? ""} />;
+  return (
+    <NewReviewForm brand={DEFAULT_TWEAKS.brand} palette={DEFAULT_TWEAKS.palette} />
+  );
 }
