@@ -9,8 +9,8 @@
  */
 
 import type {
-    Comment, DishType, MenuItem, MenuItemDetail, Paginated, PlaceSuggestion, Post,
-    Restaurant, Taxon, ToggleState,
+    Comment, DishType, MenuItem, MenuItemDetail, ModerationPost, Paginated, PlaceSuggestion,
+    Post, Restaurant, Taxon, ToggleState,
 } from "@/lib/types";
 import { type CatalogFilters, type FeedParams, endpoints } from "./endpoints";
 
@@ -198,3 +198,31 @@ export async function createPost(input: CreatePostInput) {
 
     return request<Post>("/posts", { method: "POST", body: form });
 }
+
+
+// --- Модерация ------------------------------------------------------------
+
+export interface ApproveInput {
+    /** Привязать к существующей позиции вместо создания новой — так склеиваются дубли. */
+    menuItemId?: number;
+    /** Поправленное название позиции, если автор написал криво. */
+    menuItemName?: string;
+    /** Решение по предложенной цене — отдельное от решения по посту. */
+    acceptPrice?: boolean;
+}
+
+export const approveModerationPost = (id: number, input: ApproveInput = {}) =>
+    request<ModerationPost>(endpoints.moderationApprove(id), {
+        method: "POST",
+        body: JSON.stringify({
+            menu_item_id: input.menuItemId,
+            menu_item_name: input.menuItemName,
+            accept_price: input.acceptPrice ?? true,
+        }),
+    });
+
+export const rejectModerationPost = (id: number, reason: string) =>
+    request<ModerationPost>(endpoints.moderationReject(id), {
+        method: "POST",
+        body: JSON.stringify({ reason }),
+    });
