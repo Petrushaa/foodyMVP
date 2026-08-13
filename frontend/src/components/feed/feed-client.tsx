@@ -359,7 +359,9 @@ export function FeedClient({
             </>
           ) : (
             <FeedStatusCard
-              title={feedTab === "subs" ? "Подписок пока нет" : "Постов пока нет"}
+              title={
+                feedTab === "subs" ? "Подписок пока нет" : "Постов в вашем городе пока нет"
+              }
               body={
                 feedTab === "subs"
                   ? "Подпишитесь на авторов из раздела «Новое», и их посты появятся здесь."
