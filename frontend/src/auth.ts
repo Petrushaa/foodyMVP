@@ -28,6 +28,50 @@ async function refreshAccessToken(token: any) {
     }
 }
 
+/** Как часто перечитываем профиль в токен. */
+const PROFILE_TTL = 5 * 60 * 1000;
+
+/**
+ * Подтягивает имя и аватар из профиля в токен.
+ *
+ * Нужно потому, что имя снимается один раз при входе и дальше в куке
+ * не меняется: поменял имя в настройках — интерфейс до перезахода рисует
+ * старое, а если имени на момент входа не было, заглушка берёт букву из
+ * логина («L» от «logacevz» вместо «К» от «Кирыч»).
+ *
+ * Ошибку глотаем: профиль — не то, ради чего стоит рвать сессию.
+ */
+async function withFreshProfile(token: any) {
+    // Обновление токена уже провалилось — ходить с мёртвым токеном незачем.
+    if (token.error) return token;
+
+    const fetchedAt = token.profileFetchedAt as number | undefined;
+    const isFresh = fetchedAt && Date.now() - fetchedAt < PROFILE_TTL;
+    // Имя, равное логину, — это не имя, а заглушка на случай пустого профиля.
+    // Ждать с ней пять минут незачем: человек мог заполнить имя только что.
+    const hasRealName = token.name && token.name !== token.username;
+    if (isFresh && hasRealName) return token;
+
+    try {
+        const API_URL = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000/api/v1";
+        const response = await fetch(`${API_URL}/users/me/`, {
+            headers: { Authorization: `Bearer ${token.accessToken}` },
+        });
+        if (!response.ok) return token;
+
+        const me = await response.json();
+        return {
+            ...token,
+            name: me.full_name || me.username || token.name,
+            picture: me.avatar ?? null,
+            username: me.username ?? token.username,
+            profileFetchedAt: Date.now(),
+        };
+    } catch {
+        return token;
+    }
+}
+
 export const { handlers, signIn, signOut, auth } = NextAuth({
     providers: [
         Credentials({
@@ -104,17 +148,19 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 token.name = user.name ?? token.name
                 token.picture = (user as any).image ?? token.picture
                 token.username = (user as any).username ?? token.username
+                token.profileFetchedAt = Date.now()
                 return token
             }
 
             // Return previous token if it hasn't expired yet (with 60s buffer)
             const expiresAt = token.accessTokenExpires as number | undefined;
             if (expiresAt && Date.now() < expiresAt - 60 * 1000) {
-                return token
+                // Токен ещё живой, но профиль в нём мог устареть.
+                return withFreshProfile(token)
             }
 
             // Access token has expired — try to refresh
-            return refreshAccessToken(token)
+            return withFreshProfile(await refreshAccessToken(token))
         },
         async session({ session, token }) {
             // If the refresh failed, drop session so middleware/pages
