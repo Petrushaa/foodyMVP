@@ -143,12 +143,6 @@ export const getTaxons = (kind?: string) => request<Taxon[]>(endpoints.taxons(ki
 export const suggestPlaces = (text: string, city?: string) =>
     request<PlaceSuggestion[]>(endpoints.placeSuggest(text, city));
 
-/** «Не нашёл своё место» — копим то, что люди не смогли найти на карте. */
-export const reportPlaceNotFound = (query: string, comment: string) =>
-    request<unknown>(endpoints.placeNotFound(), {
-        method: "POST",
-        body: JSON.stringify({ query, comment }),
-    });
 
 // --- Создание поста -------------------------------------------------------
 

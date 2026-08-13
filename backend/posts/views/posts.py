@@ -11,13 +11,11 @@
 from django.db.models import Prefetch, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.exceptions import PermissionDenied
-from rest_framework.generics import CreateAPIView
 from rest_framework.response import Response
 
-from ..models import PlaceNotFoundReport, Post, PostLike, PostSave
+from ..models import Post, PostLike, PostSave
 from ..serializers import (
-    PlaceNotFoundReportSerializer, PostCreateSerializer, PostListSerializer,
-    PostUpdateSerializer,
+    PostCreateSerializer, PostListSerializer, PostUpdateSerializer,
 )
 
 
@@ -122,19 +120,3 @@ class PostViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         # Мягкое удаление: Post.delete() проставляет отметку, ничего не стирая.
         instance.delete()
-
-
-class PlaceNotFoundReportView(CreateAPIView):
-    """
-    «Не нашёл своё место на карте».
-
-    Копит конкретные названия, которые люди не смогли найти, — по этим данным
-    решаем отложенный вопрос про заведения вне Яндекс.Карт (вопрос №4 плана).
-    """
-
-    serializer_class = PlaceNotFoundReportSerializer
-    permission_classes = [permissions.IsAuthenticated]
-    queryset = PlaceNotFoundReport.objects.all()
-
-    def perform_create(self, serializer):
-        serializer.save(user=self.request.user)

@@ -900,23 +900,3 @@ class MenuItemReport(models.Model):
         verbose_name = 'Жалоба на позицию'
         verbose_name_plural = 'Жалобы на позиции'
         ordering = ['-created_at']
-
-
-class PlaceNotFoundReport(models.Model):
-    """
-    «Не нашёл своё место». Нужен, чтобы решать вопрос про заведения вне Яндекс.Карт
-    по данным, а не на глаз: копим конкретные названия, которые люди не смогли найти.
-    """
-
-    user = models.ForeignKey(
-        settings.AUTH_USER_MODEL, on_delete=models.SET_NULL, null=True,
-        related_name='place_not_found_reports', verbose_name='Пользователь'
-    )
-    query = models.CharField(max_length=255, blank=True, verbose_name='Что искали')
-    comment = models.TextField(blank=True, verbose_name='Комментарий пользователя')
-    created_at = models.DateTimeField(auto_now_add=True, db_index=True)
-
-    class Meta:
-        verbose_name = 'Заведение не найдено'
-        verbose_name_plural = 'Заведения не найдены'
-        ordering = ['-created_at']

@@ -4,7 +4,7 @@ from .models import (
     Tag, Taxon, DishType, Brand, Restaurant, RestaurantAlias,
     MenuItem, MenuItemAlias, MenuItemTag,
     Post, PostImage, PostStatistics, PostLike, PostSave,
-    Comment, CommentLike, MenuItemReport, PlaceNotFoundReport,
+    Comment, CommentLike, MenuItemReport,
 )
 
 
@@ -131,14 +131,6 @@ class MenuItemReportAdmin(admin.ModelAdmin):
     list_display = ('id', 'menu_item', 'user', 'status', 'created_at', 'resolved_at')
     list_filter = ('status', 'created_at')
     search_fields = ('text', 'menu_item__name')
-
-
-@admin.register(PlaceNotFoundReport)
-class PlaceNotFoundReportAdmin(admin.ModelAdmin):
-    """Копим то, что люди не смогли найти на карте — по этим данным решаем вопрос №4."""
-
-    list_display = ('id', 'query', 'user', 'created_at')
-    search_fields = ('query', 'comment')
 
 
 admin.site.register(PostStatistics)

@@ -87,7 +87,6 @@ export const endpoints = {
      */
     placeSuggest: (text: string, city?: string) =>
         `/places/suggest${query({ text, city })}`,
-    placeNotFound: () => "/places/not-found",
 
     // --- Модерация ---
     moderationQueue: (kind?: string, page?: number) => `/moderation${query({ kind, page })}`,

@@ -22,7 +22,7 @@ from rest_framework import serializers
 
 from .models import (
     MAX_IMAGES_PER_POST, MAX_TAGS_PER_POST, MAX_POSTS_PER_DAY, MIN_PRICE_CHANGE_RATIO,
-    Comment, DishType, MenuItem, PlaceNotFoundReport, Post, PostImage, PostStatistics,
+    Comment, DishType, MenuItem, Post, PostImage, PostStatistics,
     PostTag, Restaurant, Tag, Taxon, normalize_name,
 )
 from .services.restaurants import find_exact, find_possible_duplicates
@@ -735,18 +735,3 @@ class CommentSerializer(serializers.ModelSerializer):
     def get_is_editable(self, obj):
         user = self._user()
         return bool(user and obj.user_id == user.id)
-
-
-class PlaceNotFoundReportSerializer(serializers.ModelSerializer):
-    """
-    «Не нашёл своё место». Копим конкретные названия, которые люди не смогли найти
-    на карте, — по ним решаем отложенный вопрос про заведения вне Яндекс.Карт.
-    """
-
-    class Meta:
-        model = PlaceNotFoundReport
-        fields = ['id', 'query', 'comment', 'created_at']
-        read_only_fields = ['id', 'created_at']
-
-    def validate_comment(self, value):
-        return _sanitize(value)

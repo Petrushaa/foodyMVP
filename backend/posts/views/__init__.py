@@ -11,10 +11,10 @@ from .catalog import (
     TaxonListView,
 )
 from .moderation import ModerationViewSet
-from .posts import PlaceNotFoundReportView, PostViewSet
+from .posts import PostViewSet
 
 __all__ = [
-    'PostViewSet', 'PlaceNotFoundReportView', 'ModerationViewSet',
+    'PostViewSet', 'ModerationViewSet',
     'MenuItemViewSet', 'RestaurantViewSet', 'DishTypeListView', 'TaxonListView',
     'PlaceSuggestView', 'TagListView', 'PostLikeView', 'PostSaveView', 'CommentViewSet', 'CommentLikeView',
 ]
