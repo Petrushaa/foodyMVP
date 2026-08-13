@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { fixMediaUrl } from "@/lib/api";
 
 export type MenuItemTileData = {
@@ -36,7 +38,10 @@ export function MenuItemTile({
   const place = showPlace ? item.restaurant?.name : null;
 
   return (
-    <div className="group relative block aspect-square overflow-hidden rounded-2xl border border-white/65 bg-white/55 shadow-[0_8px_22px_rgba(20,40,28,0.08),inset_1px_1px_0_rgba(255,255,255,0.7)] backdrop-blur-[16px]">
+    <Link
+      href={`/menu-item/${item.id}`}
+      className="group relative block aspect-square overflow-hidden rounded-2xl border border-white/65 bg-white/55 shadow-[0_8px_22px_rgba(20,40,28,0.08),inset_1px_1px_0_rgba(255,255,255,0.7)] backdrop-blur-[16px]"
+    >
       {photo ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
@@ -88,6 +93,6 @@ export function MenuItemTile({
           {price}
         </div>
       )}
-    </div>
+    </Link>
   );
 }

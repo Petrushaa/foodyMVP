@@ -155,3 +155,44 @@ class TestMenuItemSearchApi:
         self._published(make_post, author, moderator, item='Чизбургер')
 
         assert api_client.get(f'{self.URL}?search=щщыыъъ').data['count'] == 0
+
+
+@pytest.mark.django_db
+class TestMenuItemPage:
+    """Страница позиции: открывается по ссылке, в том числе из другого города."""
+
+    URL = '/api/v1/menu-items/'
+
+    def test_detail_opens_from_another_city(self, api_client, author, other_author,
+                                            moderator, make_post):
+        item = approve_post(make_post(author), moderator).menu_item  # Москва
+        other_author.city = 'Казань'
+        other_author.save(update_fields=['city'])
+        api_client.force_authenticate(other_author)
+
+        response = api_client.get(f'{self.URL}{item.id}/')
+
+        assert response.status_code == 200, 'по ссылке позиция открывается всегда'
+        assert response.data['name'] == item.name
+        assert api_client.get(self.URL).data['count'] == 0, 'но в выдаче её нет'
+
+    def test_detail_carries_page_data(self, api_client, author, moderator, make_post):
+        item = approve_post(make_post(author, price=350), moderator).menu_item
+
+        data = api_client.get(f'{self.URL}{item.id}/').data
+
+        assert data['restaurant']['name'] and data['dish_type']
+        assert data['price'] == '350.00'
+        assert 'tags' in data and 'brand_rating' in data
+
+    def test_posts_of_item_open_from_another_city(self, api_client, author, other_author,
+                                                  moderator, make_post):
+        item = approve_post(make_post(author), moderator).menu_item
+        other_author.city = 'Казань'
+        other_author.save(update_fields=['city'])
+        api_client.force_authenticate(other_author)
+
+        response = api_client.get(f'{self.URL}{item.id}/posts/')
+
+        assert response.status_code == 200
+        assert response.data['count'] == 1
