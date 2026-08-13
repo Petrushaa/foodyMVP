@@ -12,6 +12,7 @@ import {
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
+import { useSession } from "next-auth/react";
 import { createPortal } from "react-dom";
 
 import { UserAvatar } from "@/components/feed/user-avatar";
@@ -64,11 +65,22 @@ const SHEET_TRANSITION = {
 const OVERLAY_TRANSITION = { duration: 0.22, ease: "easeOut" } as const;
 // MVP: timestamps are hidden in the sheet, but can be restored by flipping this.
 const SHOW_COMMENT_TIMESTAMPS = false;
-function makeCurrentUser(username?: string | null): PostComment {
+/**
+ * Текущий пользователь для поля ввода.
+ *
+ * `realName` — именно имя, а не логин: заглушка аватара берёт из него букву,
+ * и раньше выходило «M» от «mr.dragon.100» вместо «Ж» от «Женя».
+ */
+function makeCurrentUser(
+  username?: string | null,
+  displayName?: string | null,
+  avatarUrl?: string | null,
+): PostComment {
   return {
     id: 0,
     user: username ? `@${username}` : "@you",
-    realName: username ?? "Вы",
+    realName: displayName || username || "Вы",
+    avatarUrl: avatarUrl || undefined,
     when: "только что",
     text: "",
     likes: 0,
@@ -231,7 +243,12 @@ export function CommentsSheet({
   currentUsername,
   postId,
 }: CommentsSheetProps) {
-  const CURRENT_USER = makeCurrentUser(currentUsername);
+  const { data: session } = useSession();
+  const CURRENT_USER = makeCurrentUser(
+    currentUsername,
+    session?.user?.name,
+    session?.user?.image,
+  );
   // Аутентификацию для лайков комментов определяет факт входа (currentUsername).
   // Сам запрос идёт через BFF-прокси /backend — токен подставляет сервер из куки,
   // поэтому реальный accessToken на клиенте больше не нужен (маркер «authed»).

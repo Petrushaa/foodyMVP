@@ -57,6 +57,8 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     // Fetch real user data to get Django user ID
                     let userId: number | null = null;
                     let username: string | null = null;
+                    let displayName: string | null = null;
+                    let avatar: string | null = null;
                     try {
                         const meResponse = await fetch(`${API_URL}/users/me/`, {
                             headers: { Authorization: `Bearer ${tokens.access}` },
@@ -65,6 +67,10 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                             const me = await meResponse.json();
                             userId = me.id ?? null;
                             username = me.username ?? null;
+                            // Показываем человеку его имя, а не логин: иначе заглушка
+                            // аватара берёт букву из «mr.dragon.100», а не из «Женя».
+                            displayName = me.full_name || me.username || null;
+                            avatar = me.avatar || null;
                         }
                     } catch {
                         // Non-fatal — id will fall back to email
@@ -73,7 +79,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                     return {
                         id: userId ? String(userId) : email,
                         email: email,
-                        name: username,
+                        name: displayName,
+                        image: avatar,
+                        username,
                         accessToken: tokens.access,
                         refreshToken: tokens.refresh,
                         // Assume 60 min lifetime, refresh 5 min early
@@ -93,6 +101,9 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
                 token.accessToken = (user as any).accessToken
                 token.refreshToken = (user as any).refreshToken
                 token.accessTokenExpires = (user as any).accessTokenExpires
+                token.name = user.name ?? token.name
+                token.picture = (user as any).image ?? token.picture
+                token.username = (user as any).username ?? token.username
                 return token
             }
 
@@ -114,6 +125,11 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
             }
             if (session.user) {
                 (session.user as any).accessToken = token.accessToken;
+                // Имя и аватар нужны интерфейсу: по ним рисуется заглушка
+                // и подпись в поле ввода комментария.
+                session.user.name = (token.name as string) ?? session.user.name;
+                session.user.image = (token.picture as string) ?? session.user.image;
+                (session.user as any).username = (token as any).username;
                 // Pass through the real Django user ID stored at login
                 if (token.sub) {
                     session.user.id = token.sub;
