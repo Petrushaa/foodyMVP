@@ -10,7 +10,13 @@ import { cn } from "@/lib/utils";
 const PRESS_CLASSES =
   "origin-center transition-transform duration-150 ease-out active:scale-[0.94] [-webkit-tap-highlight-color:transparent]";
 
-export type CategoryChip = { id: string; label: string; emoji: string };
+export type CategoryChip = {
+  id: string;
+  /** Значение для бэкенда: слаг категории или название типа блюда. */
+  value: string;
+  label: string;
+  emoji: string;
+};
 export type CategoryGroups = {
   dishes: CategoryChip[];
   cuisines: CategoryChip[];
@@ -29,37 +35,54 @@ const TABS: readonly { id: Tab; label: string }[] = [
   { id: "diets", label: "Особенности" },
 ];
 
+// Каким параметром фильтруется вкладка. Оси каталога бэкенд уже принимает
+// слагами (?cuisine=japanese), «Блюда» — это тип блюда по названию.
+const TAB_PARAM: Record<Tab, string> = {
+  dishes: "dish_type",
+  cuisines: "cuisine",
+  formats: "format",
+  forms: "form",
+  diets: "diet",
+};
+const CATEGORY_PARAMS = Object.values(TAB_PARAM);
+
 /**
- * Кнопка «Категория» на странице результатов. Открывает шторку с нашими тремя
- * разделами (Блюда / Кухни / Формат) и сеткой категорий. Категория пока — это
- * текстовый запрос q (заглушка), цена и прочие параметры сохраняются.
+ * Кнопка «Категория» на странице результатов. Открывает шторку с разделами
+ * (Блюда / Кухни / Формат / Форма / Особенности) и сеткой категорий.
+ *
+ * Выбор кладёт в адрес настоящий фильтр, а не текстовый запрос: раньше сюда
+ * писалось `q=Японская`, и поиск искал это слово в названиях — «Роллы»
+ * японской кухни не находились. Цена и прочие параметры сохраняются.
  */
 export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
 
-  const currentQuery = (searchParams.get("q") ?? "").trim().toLowerCase();
+  const search = searchParams.toString();
 
-  // Ищем текущую категорию среди всех групп → подпись кнопки и стартовая вкладка.
+  // Ищем выбранную категорию среди всех групп → подпись кнопки и стартовая вкладка.
   const matched = useMemo(() => {
+    const params = new URLSearchParams(search);
     for (const tab of TABS) {
-      const hit = groups[tab.id].find(
-        (c) => c.label.trim().toLowerCase() === currentQuery
-      );
-      if (hit) return { tab: tab.id, label: hit.label };
+      const current = params.get(TAB_PARAM[tab.id]);
+      if (!current) continue;
+      const hit = groups[tab.id].find((c) => c.value === current);
+      if (hit) return { tab: tab.id, label: hit.label, value: hit.value };
     }
     return null;
-  }, [currentQuery, groups]);
+  }, [groups, search]);
 
   const [open, setOpen] = useState(false);
   const [tab, setTab] = useState<Tab>("dishes");
 
-  const applyQuery = useCallback(
-    (label: string | null) => {
+  const applyCategory = useCallback(
+    (chip: CategoryChip | null, tabId: Tab) => {
       const params = new URLSearchParams(searchParams.toString());
-      if (label) params.set("q", label);
-      else params.delete("q");
+      // Категория одна: выбирая кухню, снимаем ранее выбранную форму или тип блюда.
+      for (const name of CATEGORY_PARAMS) params.delete(name);
+      params.delete("category_id"); // старый числовой параметр, если остался в адресе
+      if (chip) params.set(TAB_PARAM[tabId], chip.value);
       const qs = params.toString();
       router.push(qs ? `${pathname}?${qs}` : pathname);
     },
@@ -75,9 +98,9 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
     (chip: CategoryChip) => {
       setOpen(false);
       // Повторный выбор текущей категории — снимаем её.
-      applyQuery(chip.label.trim().toLowerCase() === currentQuery ? null : chip.label);
+      applyCategory(matched?.value === chip.value ? null : chip, tab);
     },
-    [applyQuery, currentQuery]
+    [applyCategory, matched, tab]
   );
 
   const activeList = groups[tab];
@@ -103,7 +126,7 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
       {matched && (
         <button
           type="button"
-          onClick={() => applyQuery(null)}
+          onClick={() => applyCategory(null, tab)}
           aria-label="Сбросить категорию"
           className={cn(
             "grid size-[34px] shrink-0 place-items-center rounded-full border-[1.5px] border-[rgba(20,40,28,0.14)] bg-white text-[#5C6B62]",
@@ -150,7 +173,7 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
 
             <div className="hide-scroll mt-4 grid max-h-[46vh] grid-cols-4 gap-x-2.5 gap-y-3.5 overflow-y-auto pb-1">
               {activeList.map((chip) => {
-                const isActive = chip.label.trim().toLowerCase() === currentQuery;
+                const isActive = matched?.value === chip.value;
                 return (
                   <button
                     key={chip.id}

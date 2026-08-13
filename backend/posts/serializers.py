@@ -488,8 +488,13 @@ class PostCreateSerializer(serializers.ModelSerializer):
             ),
             **validated_data,
         )
-        if taxons:
-            post.draft_taxons.set(taxons)
+        # Категории берём из типа блюда, если автор не выбрал свои. Ровно для
+        # этого у типа блюда есть `default_taxons`: «Роллы» — это японская кухня,
+        # суши и ресторан, и требовать, чтобы это каждый раз проставлял клиент,
+        # значит однажды получить каталог без категорий. Без них не работают
+        # фильтры по кухне, формату, форме и особенностям.
+        dish_type = post.draft_dish_type
+        post.draft_taxons.set(taxons or (dish_type.default_taxons.all() if dish_type else []))
 
         for image in images:
             PostImage.objects.create(post=post, image=image)

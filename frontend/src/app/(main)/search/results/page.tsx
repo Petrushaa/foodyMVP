@@ -24,6 +24,11 @@ type SearchResultsPageProps = {
     category_id?: string | string[];
     price_min?: string | string[];
     price_max?: string | string[];
+    dish_type?: string | string[];
+    cuisine?: string | string[];
+    format?: string | string[];
+    form?: string | string[];
+    diet?: string | string[];
   }>;
 };
 
@@ -37,6 +42,14 @@ export default async function SearchResultsPage({
   const categoryId = getSingleSearchParam(params.category_id);
   const priceMin = getSingleSearchParam(params.price_min);
   const priceMax = getSingleSearchParam(params.price_max);
+  // Категория из шапки: оси каталога идут слагами, «Блюда» — названием типа.
+  const axes = {
+    dish_type: getSingleSearchParam(params.dish_type),
+    cuisine: getSingleSearchParam(params.cuisine),
+    format: getSingleSearchParam(params.format),
+    form: getSingleSearchParam(params.form),
+    diet: getSingleSearchParam(params.diet),
+  };
 
   const session = (await auth()) as any;
   const accessToken: string | null = session?.user?.accessToken ?? null;
@@ -52,11 +65,11 @@ export default async function SearchResultsPage({
     getDietCategories(),
   ]);
   const categoryGroups: CategoryGroups = {
-    dishes: dishes.map((c) => ({ id: `dish-${c.id}`, label: c.label, emoji: c.emoji })),
-    cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, label: c.label, emoji: c.emoji })),
-    formats: formats.map((c) => ({ id: `fmt-${c.id}`, label: c.label, emoji: c.emoji })),
-    forms: forms.map((c) => ({ id: `frm-${c.id}`, label: c.label, emoji: c.emoji })),
-    diets: diets.map((c) => ({ id: `diet-${c.id}`, label: c.label, emoji: c.emoji })),
+    dishes: dishes.map((c) => ({ id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
+    cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
+    formats: formats.map((c) => ({ id: `fmt-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
+    forms: forms.map((c) => ({ id: `frm-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
+    diets: diets.map((c) => ({ id: `diet-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
   };
 
   const qs = new URLSearchParams();
@@ -65,6 +78,9 @@ export default async function SearchResultsPage({
   if (categoryId) qs.set("category_id", categoryId);
   if (priceMin) qs.set("price_min", priceMin);
   if (priceMax) qs.set("price_max", priceMax);
+  for (const [name, value] of Object.entries(axes)) {
+    if (value) qs.set(name, value);
+  }
   // Ищем позиции, а не посты: человек ищет блюдо, а не чью-то запись о нём.
   // Бэкенд сужает выдачу городом сам, по профилю смотрящего.
   const endpoint = qs.toString() ? `/menu-items/?${qs.toString()}` : "/menu-items/";

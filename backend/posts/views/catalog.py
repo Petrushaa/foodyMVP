@@ -135,6 +135,12 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
         if category_id and category_id.isdigit():
             queryset = queryset.filter(taxons__id=category_id)
 
+        # Тип блюда фронт знает по названию: справочник он показывает названиями,
+        # и форма создания поста отправляет его так же.
+        dish_type = (self.request.query_params.get('dish_type') or '').strip()
+        if dish_type:
+            queryset = queryset.filter(dish_type__name__iexact=dish_type)
+
         for param, lookup in (('price_min', 'gte'), ('price_max', 'lte')):
             value = self.request.query_params.get(param)
             if value:

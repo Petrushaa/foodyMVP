@@ -83,7 +83,12 @@ def _menu_item_from_draft(post, restaurant, name=None):
         menu_item = MenuItem.objects.get(restaurant=restaurant, normalized_name=normalized)
         return menu_item, False
 
-    menu_item.taxons.set(post.draft_taxons.all())
+    # Позиция без категорий не находится ни одним фильтром — ни по кухне, ни по
+    # формату, ни по форме. Поэтому если в заявке их нет, берём у типа блюда.
+    taxons = post.draft_taxons.all()
+    if not taxons.exists() and post.draft_dish_type_id:
+        taxons = post.draft_dish_type.default_taxons.all()
+    menu_item.taxons.set(taxons)
     logger.info('Модерация: создана позиция «%s» в %s', menu_item.name, restaurant.name)
     return menu_item, True
 

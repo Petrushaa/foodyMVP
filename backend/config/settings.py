@@ -202,6 +202,11 @@ REST_FRAMEWORK = {
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': get_env_int('PAGE_SIZE', 20),
 
+    # Освобождаем имя `format`: у нас это ось каталога (?format=fastfood), а DRF
+    # по умолчанию разбирает его как выбор формата ответа и отвечает 404 на
+    # незнакомое значение — фильтр до кода просто не доходил.
+    'URL_FORMAT_OVERRIDE': 'response_format',
+
     # Дефолтный поиск по всем вьюхам, где указан filter_backends
     'DEFAULT_FILTER_BACKENDS': [
         'django_filters.rest_framework.DjangoFilterBackend',

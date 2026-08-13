@@ -196,3 +196,55 @@ class TestMenuItemPage:
 
         assert response.status_code == 200
         assert response.data['count'] == 1
+
+
+@pytest.mark.django_db
+class TestCatalogAxisFilters:
+    """
+    Фильтры страницы поиска по осям каталога. Приходят слагами, как их отдаёт
+    справочник `/taxons/`, а тип блюда — названием.
+    """
+
+    URL = '/api/v1/menu-items/'
+
+    def _published(self, make_post, author, moderator, **kwargs):
+        return approve_post(make_post(author, **kwargs), moderator).menu_item
+
+    def test_each_axis_filters(self, api_client, author, moderator, make_post):
+        item = self._published(make_post, author, moderator)
+
+        for taxon in item.taxons.all():
+            response = api_client.get(f'{self.URL}?{taxon.kind}={taxon.slug}')
+            assert response.data['count'] == 1, f'ось {taxon.kind} не отфильтровала'
+
+    def test_format_axis_is_not_eaten_by_drf(self, api_client, author, moderator,
+                                             make_post):
+        """
+        `format` — зарезервированное имя в DRF: он разбирает его как выбор
+        формата ответа и отдаёт 404 на незнакомое значение. Имя освобождено
+        настройкой URL_FORMAT_OVERRIDE, и этот тест сторожит именно её.
+        """
+        item = self._published(make_post, author, moderator)
+        taxon = item.taxons.filter(kind='format').first()
+
+        response = api_client.get(f'{self.URL}?format={taxon.slug}')
+
+        assert response.status_code == 200
+        assert response.data['count'] == 1
+
+    def test_dish_type_filters_by_name(self, api_client, author, moderator, make_post,
+                                       burger):
+        self._published(make_post, author, moderator)
+
+        assert api_client.get(f'{self.URL}?dish_type={burger.name}').data['count'] == 1
+        assert api_client.get(f'{self.URL}?dish_type=Борщ').data['count'] == 0
+
+    def test_axis_and_search_combine(self, api_client, author, moderator, make_post):
+        item = self._published(make_post, author, moderator, item='Чизбургер')
+        cuisine = item.taxons.filter(kind='cuisine').first()
+
+        found = api_client.get(f'{self.URL}?cuisine={cuisine.slug}&search=чизбургер')
+        missed = api_client.get(f'{self.URL}?cuisine={cuisine.slug}&search=борщ')
+
+        assert found.data['count'] == 1
+        assert missed.data['count'] == 0

@@ -134,3 +134,57 @@ class TestGuards:
         post.save()
         with pytest.raises(ModerationError):
             approve_post(post, moderator)
+
+
+@pytest.mark.django_db
+class TestTaxonsFromDishType:
+    """
+    Позиция без категорий не находится ни одним фильтром поиска. Клиент их
+    не присылает, поэтому категории по умолчанию проставляет сервер — из типа
+    блюда, для этого справочник и заполнен.
+    """
+
+    def test_post_gets_taxons_of_its_dish_type(self, auth_client, burger):
+        response = auth_client.post('/api/v1/posts/', {
+            'restaurant_name': 'Бургерная', 'restaurant_address': 'Тверская 15',
+            'restaurant_city': 'Москва', 'menu_item_name': 'Чизбургер',
+            'author_rating': 8, 'price': 350, 'dish_type_id': burger.id,
+        })
+
+        assert response.status_code == 201
+        post = Post.objects.get()
+        assert set(post.draft_taxons.all()) == set(burger.default_taxons.all())
+        assert post.draft_taxons.exists(), 'иначе позиция выпадет из всех фильтров'
+
+    def test_explicit_choice_wins_over_defaults(self, auth_client, burger):
+        chosen = burger.default_taxons.first()
+
+        auth_client.post('/api/v1/posts/', {
+            'restaurant_name': 'Бургерная', 'restaurant_address': 'Тверская 15',
+            'restaurant_city': 'Москва', 'menu_item_name': 'Чизбургер',
+            'author_rating': 8, 'price': 350, 'dish_type_id': burger.id,
+            'taxon_ids': [chosen.id],
+        })
+
+        assert list(Post.objects.get().draft_taxons.all()) == [chosen]
+
+    def test_menu_item_inherits_taxons_on_approval(self, author, moderator, make_post,
+                                                   burger):
+        post = make_post(author)
+        post.draft_taxons.clear()  # заявка без категорий
+
+        menu_item = approve_post(post, moderator).menu_item
+
+        assert set(menu_item.taxons.all()) == set(burger.default_taxons.all()), \
+            'категории берутся у типа блюда, даже если в заявке их не было'
+
+    def test_approved_item_is_findable_by_cuisine(self, api_client, author, moderator,
+                                                  make_post, burger):
+        """Тот самый случай: «японская кухня» должна находить «Роллы»."""
+        post = make_post(author)
+        post.draft_taxons.clear()
+        menu_item = approve_post(post, moderator).menu_item
+        cuisine = menu_item.taxons.filter(kind='cuisine').first()
+
+        response = api_client.get(f'/api/v1/menu-items/?category_id={cuisine.id}')
+        assert response.data['count'] == 1
