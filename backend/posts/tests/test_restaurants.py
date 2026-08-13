@@ -199,3 +199,59 @@ class TestRestaurantApiVisibility:
         restaurant.save(update_fields=['is_hidden'])
 
         assert api_client.get(f'{self.URL}{restaurant.id}/').status_code == 404
+
+
+@pytest.mark.django_db
+class TestMenuItemPhoto:
+    """
+    Своих фотографий у позиции нет — она показывает снимок с поста о ней.
+    Плитка без фото выглядит поломкой, поэтому проверяем и обратный случай.
+    """
+
+    URL = '/api/v1/restaurants/'
+
+    def _photo_of_first_item(self, api_client, restaurant):
+        response = api_client.get(f'{self.URL}{restaurant.id}/menu/')
+        return response.data['results'][0]['photo']
+
+    def test_photo_comes_from_approved_post(self, api_client, author, moderator,
+                                            make_post, image_file):
+        from posts.models import PostImage
+        from posts.services.moderation import approve_post
+
+        post = approve_post(make_post(author), moderator)
+        PostImage.objects.create(post=post, image=image_file)
+
+        photo = self._photo_of_first_item(api_client, post.menu_item.restaurant)
+        assert photo and photo.startswith('/media/')
+
+    def test_no_photo_when_post_has_none(self, api_client, author, moderator, make_post):
+        from posts.services.moderation import approve_post
+
+        post = approve_post(make_post(author), moderator)
+
+        assert self._photo_of_first_item(api_client, post.menu_item.restaurant) is None
+
+    def test_deleted_post_photo_is_not_used(self, api_client, author, other_author,
+                                            moderator, make_post, image_file):
+        """
+        Позиция с одним постом после его удаления просто пропадает из меню
+        (`posts_count` обнуляется). Проверяем случай, ради которого фильтр и нужен:
+        постов два, свежий удалили — представлять позицию должен оставшийся.
+        """
+        from posts.models import PostImage
+        from posts.services.moderation import approve_post
+
+        old_post = approve_post(make_post(author), moderator)
+        PostImage.objects.create(post=old_post, image=image_file)
+        new_post = approve_post(make_post(other_author), moderator)
+        PostImage.objects.create(post=new_post, image=image_file)
+
+        restaurant = old_post.menu_item.restaurant
+        assert self._photo_of_first_item(api_client, restaurant) is not None
+
+        new_post.delete()  # мягкое
+
+        photo = self._photo_of_first_item(api_client, restaurant)
+        assert photo is not None, 'осталось фото с первого поста'
+        assert str(new_post.images.first().image) not in photo

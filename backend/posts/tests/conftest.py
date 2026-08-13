@@ -80,3 +80,19 @@ def api_client():
 def auth_client(api_client, author):
     api_client.force_authenticate(author)
     return api_client
+
+
+@pytest.fixture
+def image_file():
+    """
+    Настоящий PNG в памяти: PostImage при сохранении открывает файл через Pillow,
+    чтобы срезать EXIF, и на подделке из пары байт падает.
+    """
+    from io import BytesIO
+
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    from PIL import Image
+
+    buffer = BytesIO()
+    Image.new('RGB', (4, 4), 'white').save(buffer, format='PNG')
+    return SimpleUploadedFile('dish.png', buffer.getvalue(), content_type='image/png')

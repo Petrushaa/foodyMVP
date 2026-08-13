@@ -412,6 +412,31 @@ class RestaurantAlias(models.Model):
 # Позиции
 # ---------------------------------------------------------------------------
 
+class MenuItemQuerySet(models.QuerySet):
+    def with_photo(self):
+        """
+        Добавляет `photo_path` — фото с самого свежего одобренного поста о позиции.
+
+        Своих картинок у позиции нет, а показывать её плиткой без фото незачем.
+        Делаем подзапросом, а не обращением к постам у каждой записи: иначе
+        список из двадцати позиций — это двадцать лишних запросов.
+
+        Удалённые посты отсекаем явно: по связи Django берёт базовый менеджер,
+        который мягко удалённые не прячет.
+        """
+        newest_photo = (
+            PostImage.objects
+            .filter(
+                post__menu_item=models.OuterRef('pk'),
+                post__status=Post.STATUS_APPROVED,
+                post__deleted_at__isnull=True,
+            )
+            .order_by('-post__created_at', 'id')
+            .values('image')[:1]
+        )
+        return self.annotate(photo_path=models.Subquery(newest_photo))
+
+
 class MenuItem(models.Model):
     """
     Позиция — блюдо в конкретном заведении.
@@ -419,6 +444,8 @@ class MenuItem(models.Model):
     `normalized_name` — служебное поле для склейки дублей и поиска: по нему стоит
     уникальность внутри заведения и триграммный индекс для поиска с опечатками.
     """
+
+    objects = MenuItemQuerySet.as_manager()
 
     STATUS_ACTIVE = 'active'
     STATUS_HIDDEN = 'hidden'

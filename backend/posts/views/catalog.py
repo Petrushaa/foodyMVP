@@ -113,6 +113,7 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
             .filter(status=MenuItem.STATUS_ACTIVE, posts_count__gt=0)
             .select_related('restaurant', 'restaurant__brand', 'dish_type')
             .prefetch_related('taxons')
+            .with_photo()
         )
 
         for kind in (Taxon.KIND_CUISINE, Taxon.KIND_FORMAT, Taxon.KIND_FORM, Taxon.KIND_DIET):
@@ -199,6 +200,7 @@ class RestaurantViewSet(viewsets.ReadOnlyModelViewSet):
             .filter(restaurant=restaurant, status=MenuItem.STATUS_ACTIVE, posts_count__gt=0)
             .select_related('restaurant', 'dish_type')
             .prefetch_related('taxons')
+            .with_photo()
             .order_by('-rating')
         )
         page = self.paginate_queryset(items)

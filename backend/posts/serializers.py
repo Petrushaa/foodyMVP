@@ -83,14 +83,26 @@ class MenuItemSerializer(serializers.ModelSerializer):
     restaurant = RestaurantSerializer(read_only=True)
     dish_type = serializers.StringRelatedField()
     taxons = TaxonSerializer(many=True, read_only=True)
+    photo = serializers.SerializerMethodField()
 
     class Meta:
         model = MenuItem
         fields = [
-            'id', 'name', 'restaurant', 'dish_type', 'taxons',
+            'id', 'name', 'restaurant', 'dish_type', 'taxons', 'photo',
             'price', 'price_confirmed_at',
             'rating_raw', 'ratings_count', 'posts_count',
         ]
+
+    def get_photo(self, obj):
+        """
+        Фото позиции — это фото с поста о ней: своих картинок у позиции нет.
+
+        Путь берём из аннотации `photo_path` (см. `annotate_photo`): без неё
+        список позиций упёрся бы в запрос на каждую плитку. Если выдачу не
+        аннотировали — честно отдаём пустое, а не тянем скрытый запрос.
+        """
+        path = getattr(obj, 'photo_path', None)
+        return f'{settings.MEDIA_URL}{path}' if path else None
 
 
 class MenuItemDetailSerializer(MenuItemSerializer):

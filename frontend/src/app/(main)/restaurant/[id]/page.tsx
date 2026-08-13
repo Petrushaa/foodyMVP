@@ -1,49 +1,60 @@
 import { auth } from "@/auth";
 import Link from "next/link";
 import { ArrowLeft, MapPin } from "lucide-react";
-import { apiRequest } from "@/lib/api";
+import { apiRequest, fixMediaUrl } from "@/lib/api";
 import { GlassSurface } from "@/components/feed/glass-surface";
 import { UserAvatar } from "@/components/feed/user-avatar";
 
-/** «1 пост», «2 поста», «5 постов». */
-function plural(n: number, one: string, few: string, many: string) {
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return many;
-  const mod10 = n % 10;
-  if (mod10 === 1) return one;
-  if (mod10 >= 2 && mod10 <= 4) return few;
-  return many;
-}
-
-function MenuItemRow({ item }: { item: any }) {
+/** Плитка позиции — та же, что у постов в профиле: квадрат с фото и подписью. */
+function MenuItemTile({ item }: { item: any }) {
   // Оценки в базе по десятибалльной шкале, в интерфейсе везде пять звёзд.
   const rating = item.ratings_count > 0 ? (item.rating_raw / 2).toFixed(1) : null;
+  const price = item.price ? `₽${Math.round(parseFloat(item.price))}` : null;
+  const photo = fixMediaUrl(item.photo);
 
   return (
-    <GlassSurface className="flex items-center justify-between gap-3 rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
-      <div className="min-w-0">
-        <div className="truncate text-[15px] font-extrabold tracking-[-0.2px] text-[#15291C]">
-          {item.name}
-        </div>
-        <div className="mt-0.5 truncate text-[12.5px] font-medium text-[#5C6B62]">
-          {item.dish_type}
-          {rating
-            ? ` · ${rating} из 5 · ${item.ratings_count} ${plural(
-                item.ratings_count,
-                "оценка",
-                "оценки",
-                "оценок"
-              )}`
-            : " · пока без оценок"}
-        </div>
-      </div>
-
-      {item.price && (
-        <div className="shrink-0 text-[15px] font-extrabold text-[#15291C]">
-          ₽{Math.round(parseFloat(item.price))}
+    <div className="group relative block aspect-square overflow-hidden rounded-2xl border border-white/65 bg-white/55 shadow-[0_8px_22px_rgba(20,40,28,0.08),inset_1px_1px_0_rgba(255,255,255,0.7)] backdrop-blur-[16px]">
+      {photo ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={photo}
+          alt={item.name}
+          className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+        />
+      ) : (
+        <div className="grid size-full place-items-center bg-[linear-gradient(135deg,rgba(220,230,222,0.5),rgba(255,255,255,0.7))] p-3 text-center">
+          <div>
+            <p className="text-[14px] font-semibold text-[#15291C]">{item.name}</p>
+            {rating && (
+              <p className="mt-1 text-[11px] font-medium text-[#5C6B62]">{rating}</p>
+            )}
+          </div>
         </div>
       )}
-    </GlassSurface>
+
+      {/* Поверх фото подпись читается только на затемнении. */}
+      {photo && (
+        <>
+          <div className="pointer-events-none absolute inset-x-0 bottom-0 h-1/2 bg-gradient-to-t from-black/60 to-transparent" />
+          <div className="pointer-events-none absolute inset-x-2 bottom-2 text-white">
+            <p className="line-clamp-2 text-[12.5px] leading-[1.1] font-extrabold">
+              {item.name}
+            </p>
+            <p className="mt-0.5 line-clamp-1 text-[11px] font-medium text-white/85">
+              {[price, rating ? `${rating} из 5` : null].filter(Boolean).join(" · ") ||
+                item.dish_type}
+            </p>
+          </div>
+        </>
+      )}
+
+      {/* Без фото цену и оценку показываем углом, чтобы плитка не пустовала. */}
+      {!photo && price && (
+        <div className="pointer-events-none absolute right-2 bottom-2 rounded-full bg-white/80 px-2 py-0.5 text-[11px] font-extrabold text-[#15291C]">
+          {price}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -157,13 +168,13 @@ export default async function RestaurantPage({
             Позиции
           </h2>
 
-          <div className="mt-3 flex flex-col gap-2">
+          <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3">
             {menuItems.length === 0 ? (
-              <div className="py-10 text-center text-[14px] font-medium text-[#5C6B62]">
+              <div className="col-span-full py-10 text-center text-[14px] font-medium text-[#5C6B62]">
                 Здесь пока ничего не пробовали — ваш пост станет первым.
               </div>
             ) : (
-              menuItems.map((item) => <MenuItemRow key={item.id} item={item} />)
+              menuItems.map((item) => <MenuItemTile key={item.id} item={item} />)
             )}
           </div>
         </section>
