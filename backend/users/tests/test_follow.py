@@ -222,3 +222,44 @@ class TestSubscribeView:
         resp = api_client.get(reverse("user-detail", kwargs={"user_id": user_b.id}))
         assert resp.status_code == 200
         assert resp.data["followers_count"] == 0
+
+
+@pytest.mark.django_db
+class TestFollowLists:
+    """Списки подписок и подписчиков — их открывают из счётчиков в профиле."""
+
+    def test_following_lists_who_user_follows(self, api_client, user_a, user_b, user_c):
+        Follow.objects.create(follower=user_a, following=user_b)
+        Follow.objects.create(follower=user_c, following=user_a)
+
+        resp = api_client.get(reverse("user-following", kwargs={"user_id": user_a.id}))
+
+        assert resp.status_code == 200
+        assert [u["username"] for u in resp.data["results"]] == ["user_b"]
+
+    def test_followers_lists_who_follows_user(self, api_client, user_a, user_b, user_c):
+        Follow.objects.create(follower=user_a, following=user_b)
+        Follow.objects.create(follower=user_c, following=user_a)
+
+        resp = api_client.get(reverse("user-followers", kwargs={"user_id": user_a.id}))
+
+        assert resp.status_code == 200
+        assert [u["username"] for u in resp.data["results"]] == ["user_c"]
+
+    def test_list_carries_is_following_for_viewer(self, api_client, user_a, user_b):
+        """Кнопка «Отписаться» рисуется прямо в списке, без второго запроса."""
+        Follow.objects.create(follower=user_a, following=user_b)
+        token = get_token(api_client, "a@test.com")
+        api_client.credentials(HTTP_AUTHORIZATION=f"Bearer {token}")
+
+        resp = api_client.get(reverse("user-following", kwargs={"user_id": user_a.id}))
+
+        assert resp.data["results"][0]["is_following"] is True
+
+    def test_empty_for_user_without_follows(self, api_client, user_a):
+        resp = api_client.get(reverse("user-following", kwargs={"user_id": user_a.id}))
+        assert resp.data["count"] == 0
+
+    def test_unknown_user_returns_404(self, api_client):
+        resp = api_client.get(reverse("user-following", kwargs={"user_id": 999999}))
+        assert resp.status_code == 404

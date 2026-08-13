@@ -168,3 +168,34 @@ class TestMerge:
 
         merge_restaurants(duplicate, restaurant)
         assert MenuItem.objects.filter(restaurant=restaurant).count() == 1
+
+
+@pytest.mark.django_db
+class TestRestaurantApiVisibility:
+    """
+    Неподтверждённое заведение не всплывает в выдаче, но открывается по ссылке:
+    на него ведёт карточка уже опубликованного поста.
+    """
+
+    URL = '/api/v1/restaurants/'
+
+    def test_unconfirmed_is_hidden_from_list(self, api_client, restaurant):
+        assert api_client.get(self.URL).data['count'] == 0
+
+    def test_unconfirmed_opens_by_direct_link(self, api_client, restaurant):
+        response = api_client.get(f'{self.URL}{restaurant.id}/')
+
+        assert response.status_code == 200
+        assert response.data['name'] == 'Кофемания'
+
+    def test_confirmed_appears_in_list(self, api_client, restaurant):
+        restaurant.contributors_count = Restaurant.CONFIRMATIONS_REQUIRED
+        restaurant.save(update_fields=['contributors_count'])
+
+        assert api_client.get(self.URL).data['count'] == 1
+
+    def test_hidden_by_moderator_is_not_available_at_all(self, api_client, restaurant):
+        restaurant.is_hidden = True
+        restaurant.save(update_fields=['is_hidden'])
+
+        assert api_client.get(f'{self.URL}{restaurant.id}/').status_code == 404

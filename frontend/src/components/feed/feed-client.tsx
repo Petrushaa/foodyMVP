@@ -202,7 +202,7 @@ export function FeedClient({
       if (pendingLikes.has(postId)) return;
       setPendingLikes((s) => new Set(s).add(postId));
       try {
-        await toggleLike(postId, accessToken);
+        await toggleLike(postId, nextLiked, accessToken);
         setLikedSet((s) => {
           const next = new Set(s);
           if (nextLiked) next.add(postId);
@@ -233,7 +233,7 @@ export function FeedClient({
       if (pendingSaves.has(postId)) return;
       setPendingSaves((s) => new Set(s).add(postId));
       try {
-        await toggleSave(postId, accessToken);
+        await toggleSave(postId, nextSaved, accessToken);
         setSavedSet((s) => {
           const next = new Set(s);
           if (nextSaved) next.add(postId);

@@ -38,10 +38,12 @@ import { useRouter } from "next/navigation";
 import { getTagSearchHref } from "@/lib/search";
 import { type Density, type Post, type PostComment } from "@/lib/mock-data";
 
-// CSR fetch — относительный путь, браузер подставит origin (foody.press или localhost)
+// CSR fetch через BFF-прокси: он подставит токен из сессии, и вместе с текстом
+// придут лайки комментариев (`is_liked`) — иначе сердечки пришлось бы догружать
+// отдельным запросом.
 async function fetchPostComments(postId: number): Promise<PostComment[]> {
   try {
-    const res = await fetch(`/api/v1/posts/${postId}/comments/`, {
+    const res = await fetch(`/backend/comments?post=${postId}`, {
       cache: "no-store",
     });
     if (!res.ok) return [];
@@ -54,7 +56,8 @@ async function fetchPostComments(postId: number): Promise<PostComment[]> {
       avatarUrl: c.user_detail?.avatar || undefined,
       when: c.created_at ? new Date(c.created_at).toLocaleDateString("ru-RU") : "",
       text: c.text || "",
-      likes: 0,
+      likes: c.likes_count ?? 0,
+      liked: Boolean(c.is_liked),
     }));
   } catch {
     return [];

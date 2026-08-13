@@ -12,13 +12,11 @@ import {
   type KeyboardEvent,
   type MouseEvent as ReactMouseEvent,
 } from "react";
-import { useSession } from "next-auth/react";
 import { createPortal } from "react-dom";
 
 import { UserAvatar } from "@/components/feed/user-avatar";
 import {
   requestCommentLikeMutation,
-  requestCommentLikes,
 } from "@/lib/feed-api";
 import type { PostComment } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
@@ -85,6 +83,44 @@ function makeCurrentUser(
     text: "",
     likes: 0,
   };
+}
+
+/**
+ * Профиль текущего пользователя для поля ввода: имя и аватар.
+ *
+ * Запрашивается один раз на монтирование через BFF-прокси — токен подставит
+ * сервер. Ответ по сути неизменен в рамках сессии, поэтому кешируем в модуле,
+ * чтобы каждый пост в ленте не дёргал `/users/me/` заново.
+ */
+let cachedProfile: { fullName: string | null; avatar: string | null } | null = null;
+
+function useCurrentProfile(enabled: boolean) {
+  const [profile, setProfile] = useState(cachedProfile);
+
+  useEffect(() => {
+    if (!enabled || cachedProfile) return;
+
+    let isActive = true;
+    void fetch("/backend/users/me", { cache: "no-store" })
+      .then((res) => (res.ok ? res.json() : null))
+      .then((data) => {
+        if (!data) return;
+        cachedProfile = {
+          fullName: data.full_name || null,
+          avatar: data.avatar || null,
+        };
+        if (isActive) setProfile(cachedProfile);
+      })
+      .catch(() => {
+        /* заглушка по логину — приемлемый запасной вариант */
+      });
+
+    return () => {
+      isActive = false;
+    };
+  }, [enabled]);
+
+  return profile;
 }
 
 function getDisplayHandle(user: string) {
@@ -243,12 +279,11 @@ export function CommentsSheet({
   currentUsername,
   postId,
 }: CommentsSheetProps) {
-  const { data: session } = useSession();
-  const CURRENT_USER = makeCurrentUser(
-    currentUsername,
-    session?.user?.name,
-    session?.user?.image,
-  );
+  // Имя и аватар берём из профиля, а не из сессии next-auth: в куке они могут
+  // быть от прошлого входа (или отсутствовать вовсе), и тогда заглушка рисовала
+  // букву логина — «M» от «mr.dragon.100» вместо «Ж» от «Жека».
+  const me = useCurrentProfile(Boolean(currentUsername));
+  const CURRENT_USER = makeCurrentUser(currentUsername, me?.fullName, me?.avatar);
   // Аутентификацию для лайков комментов определяет факт входа (currentUsername).
   // Сам запрос идёт через BFF-прокси /backend — токен подставляет сервер из куки,
   // поэтому реальный accessToken на клиенте больше не нужен (маркер «authed»).
@@ -310,33 +345,14 @@ export function CommentsSheet({
       return;
     }
 
-    let isActive = true;
-
-    void requestCommentLikes(commentIds, accessToken)
-      .then((response) => {
-        if (!isActive) {
-          return;
-        }
-
-        setLikedCommentIds(response.likedCommentIds);
-        setCommentLikesLoaded(true);
-      })
-      .catch(() => {
-        if (!isActive) {
-          return;
-        }
-
-        setLikedCommentIds(
-          visibleComments
-            .filter((comment) => comment.liked)
-            .map((comment) => getCommentIdKey(comment.id))
-        );
-        setCommentLikesLoaded(true);
-      });
-
-    return () => {
-      isActive = false;
-    };
+    // Отдельный запрос за лайками не нужен: список комментариев уже приходит
+    // с `liked` — бэк проставляет его для текущего пользователя.
+    setLikedCommentIds(
+      visibleComments
+        .filter((comment) => comment.liked)
+        .map((comment) => getCommentIdKey(comment.id))
+    );
+    setCommentLikesLoaded(true);
   }, [open, visibleComments]);
 
   const onOpenRef = useRef(onOpen);

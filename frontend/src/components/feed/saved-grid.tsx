@@ -26,7 +26,7 @@ type SavedGridProps = {
 // CSR-подгрузка комментариев для открытого поста (тот же путь, что в PostCard).
 async function fetchPostComments(postId: number): Promise<PostComment[]> {
   try {
-    const res = await fetch(`/api/v1/posts/${postId}/comments/`, {
+    const res = await fetch(`/backend/comments?post=${postId}`, {
       cache: "no-store",
     });
     if (!res.ok) return [];
@@ -43,7 +43,8 @@ async function fetchPostComments(postId: number): Promise<PostComment[]> {
       avatarUrl: c.user_detail?.avatar || undefined,
       when: c.created_at ? new Date(c.created_at).toLocaleDateString("ru-RU") : "",
       text: c.text || "",
-      likes: 0,
+      likes: c.likes_count ?? 0,
+      liked: Boolean(c.is_liked),
     }));
   } catch {
     return [];
@@ -141,7 +142,7 @@ export function SavedGrid({
       if (pendingLikes.has(postId)) return;
       setPendingLikes((s) => new Set(s).add(postId));
       try {
-        await toggleLike(postId, accessToken);
+        await toggleLike(postId, nextLiked, accessToken);
         setLikedSet((s) => {
           const next = new Set(s);
           if (nextLiked) next.add(postId);
@@ -170,7 +171,7 @@ export function SavedGrid({
       if (pendingSaves.has(postId)) return;
       setPendingSaves((s) => new Set(s).add(postId));
       try {
-        await toggleSave(postId, accessToken);
+        await toggleSave(postId, nextSaved, accessToken);
         setSavedSet((s) => {
           const next = new Set(s);
           if (nextSaved) next.add(postId);

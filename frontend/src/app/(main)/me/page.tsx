@@ -179,14 +179,14 @@ export default async function MePage({
                   <div className="text-[20px] font-extrabold text-[#15291C]">{stats.posts}</div>
                   <div className="text-[11.5px] font-semibold tracking-wide text-[#8A958E] uppercase">Посты</div>
                 </div>
-                <div className="text-center">
+                <Link href="/me/followers" className="text-center transition-opacity active:opacity-60">
                   <div className="text-[20px] font-extrabold text-[#15291C]">{stats.followers}</div>
                   <div className="text-[11.5px] font-semibold tracking-wide text-[#8A958E] uppercase">Подписчики</div>
-                </div>
-                <div className="text-center">
+                </Link>
+                <Link href="/me/following" className="text-center transition-opacity active:opacity-60">
                   <div className="text-[20px] font-extrabold text-[#15291C]">{stats.following}</div>
                   <div className="text-[11.5px] font-semibold tracking-wide text-[#8A958E] uppercase">Подписки</div>
-                </div>
+                </Link>
               </div>
             </div>
           </GlassSurface>

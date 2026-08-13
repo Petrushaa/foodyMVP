@@ -172,12 +172,21 @@ class RestaurantViewSet(viewsets.ReadOnlyModelViewSet):
     permission_classes = [permissions.AllowAny]
 
     def get_queryset(self):
-        # В публичный каталог попадают только подтверждённые заведения — те,
-        # о которых написали несколько разных людей. Так выдуманное место
-        # не всплывает, даже если модератор его проглядел.
-        queryset = Restaurant.objects.filter(
-            is_hidden=False, contributors_count__gte=Restaurant.CONFIRMATIONS_REQUIRED,
-        ).select_related('brand')
+        """
+        В **список** каталога попадают только подтверждённые заведения — те,
+        о которых написали несколько разных людей. Так выдуманное место
+        не всплывает в выдаче, даже если модератор его проглядел.
+
+        А вот по прямой ссылке заведение открывается с первого поста: на него
+        ведёт карточка уже опубликованного поста, и упереться в «не найдено»,
+        кликнув по названию из своей же ленты, — просто поломка. Скрытые
+        модератором не открываются никак.
+        """
+        queryset = Restaurant.objects.filter(is_hidden=False).select_related('brand')
+        if self.action == 'list':
+            queryset = queryset.filter(
+                contributors_count__gte=Restaurant.CONFIRMATIONS_REQUIRED,
+            )
         city = self.request.query_params.get('city')
         return queryset.filter(normalized_city=city.strip().lower()) if city else queryset
 

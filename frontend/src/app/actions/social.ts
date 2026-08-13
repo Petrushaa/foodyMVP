@@ -28,7 +28,7 @@ export async function toggleSave(dishId: string) {
     if (!session?.user?.accessToken) return { error: "Not authenticated" };
 
     try {
-        await apiRequest(`/posts/${dishId}/save_post/`, {
+        await apiRequest(`/posts/${dishId}/save/`, {
             method: "POST",
             headers: {
                 Authorization: `Bearer ${session.user.accessToken}`,
@@ -53,7 +53,7 @@ export async function getDishComments(dishId: string) {
     }
 
     try {
-        const res = await apiRequest(`/posts/${dishId}/comments/`, {
+        const res = await apiRequest(`/comments/?post=${dishId}`, {
             headers,
             cache: 'no-store'
         });
@@ -69,13 +69,13 @@ export async function createComment(dishId: string, text: string) {
     if (!session?.user?.accessToken) return { error: "Not authenticated" };
 
     try {
-        await apiRequest(`/posts/${dishId}/comments/`, {
+        await apiRequest(`/comments/`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
                 Authorization: `Bearer ${session.user.accessToken}`,
             },
-            body: JSON.stringify({ text }),
+            body: JSON.stringify({ post: Number(dishId), text }),
         });
 
         revalidatePath('/');

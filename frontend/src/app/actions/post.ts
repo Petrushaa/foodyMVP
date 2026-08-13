@@ -130,13 +130,14 @@ export async function createComment(postId: string, text: string) {
     }
 
     try {
-        const response = await apiRequest(`/posts/${postId}/comments/`, {
+        // Комментарии лежат отдельным ресурсом, пост передаётся полем.
+        const response = await apiRequest(`/comments/`, {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${session.user.accessToken}`,
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ text })
+            body: JSON.stringify({ post: Number(postId), text })
         });
 
         revalidatePath(`/dish/${postId}`);
@@ -153,7 +154,7 @@ export async function deleteComment(postId: string, commentId: number | string) 
         return { error: "Unauthorized" };
     }
     try {
-        await apiRequest(`/posts/${postId}/comments/${commentId}/`, {
+        await apiRequest(`/comments/${commentId}/`, {
             method: "DELETE",
             headers: {
                 "Authorization": `Bearer ${session.user.accessToken}`,

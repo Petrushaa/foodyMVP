@@ -279,8 +279,8 @@ export default function StaffPanel({
                     <AlertDialogHeader>
                         <AlertDialogTitle>Отклонить пост</AlertDialogTitle>
                         <AlertDialogDescription>
-                            Опишите причину отклонения — она будет видна автору.
-                            Можно оставить пустой.
+                            Опишите причину отклонения — автор увидит её и сможет
+                            исправить пост. Без причины отклонить нельзя.
                         </AlertDialogDescription>
                     </AlertDialogHeader>
                     <Textarea
@@ -303,7 +303,10 @@ export default function StaffPanel({
                                 e.preventDefault();
                                 handleRejectConfirm();
                             }}
-                            disabled={pendingActionId === rejectTarget?.id}
+                            disabled={
+                                pendingActionId === rejectTarget?.id ||
+                                !rejectReason.trim()
+                            }
                         >
                             {pendingActionId === rejectTarget?.id ? (
                                 <Loader2 className="size-4 animate-spin" />

@@ -56,6 +56,34 @@ class UserDetailView(generics.RetrieveAPIView):
     lookup_url_kwarg = 'user_id'
 
 
+class FollowingListView(generics.ListAPIView):
+    """
+    На кого подписан пользователь: GET /api/v1/users/<id>/following/.
+
+    Отдаём тем же сериализатором, что и профиль, — фронту нужен `is_following`,
+    чтобы прямо в списке показать кнопку «Отписаться» (или «Подписаться», если
+    смотришь чужие подписки).
+    """
+
+    serializer_class = UserSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+    def get_queryset(self):
+        user = get_object_or_404(User, id=self.kwargs['user_id'])
+        return User.objects.filter(followers_set__follower=user).order_by('-followers_set__created_at')
+
+
+class FollowersListView(generics.ListAPIView):
+    """Кто подписан на пользователя: GET /api/v1/users/<id>/followers/."""
+
+    serializer_class = UserSerializer
+    permission_classes = (IsAuthenticatedOrReadOnly,)
+
+    def get_queryset(self):
+        user = get_object_or_404(User, id=self.kwargs['user_id'])
+        return User.objects.filter(following_set__following=user).order_by('-following_set__created_at')
+
+
 class SubscribeView(APIView):
     permission_classes = (IsAuthenticated,)
 

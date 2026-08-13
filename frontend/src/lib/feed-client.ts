@@ -18,14 +18,21 @@ async function beFetch(path: string, init: RequestInit = {}) {
   });
 }
 
-export async function toggleLike(postId: number, _token?: string) {
-  const res = await beFetch(`/posts/${postId}/like`, { method: "POST" });
+// Лайк и закладка на бэке не «переключаются» сами: POST ставит, DELETE снимает.
+// Нужное состояние вызывающий код и так знает (он же рисует оптимистичный UI),
+// поэтому передаём его явно — иначе снять лайк было бы нечем.
+export async function toggleLike(postId: number, nextLiked: boolean, _token?: string) {
+  const res = await beFetch(`/posts/${postId}/like`, {
+    method: nextLiked ? "POST" : "DELETE",
+  });
   if (!res.ok) throw new Error(`like failed: ${res.status}`);
   return res.json().catch(() => ({}));
 }
 
-export async function toggleSave(postId: number, _token?: string) {
-  const res = await beFetch(`/posts/${postId}/save_post`, { method: "POST" });
+export async function toggleSave(postId: number, nextSaved: boolean, _token?: string) {
+  const res = await beFetch(`/posts/${postId}/save`, {
+    method: nextSaved ? "POST" : "DELETE",
+  });
   if (!res.ok) throw new Error(`save failed: ${res.status}`);
   return res.json().catch(() => ({}));
 }

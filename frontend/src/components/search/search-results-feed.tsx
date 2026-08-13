@@ -134,7 +134,7 @@ export function SearchResultsFeed({
       setPendingLikePostIds((current) => new Set(current).add(postId));
 
       try {
-        await toggleLike(postId, accessToken);
+        await toggleLike(postId, nextLiked, accessToken);
         setLikedPostIds((current) => {
           const next = new Set(current);
           if (nextLiked) next.add(postId);
@@ -165,7 +165,7 @@ export function SearchResultsFeed({
       setPendingSavePostIds((current) => new Set(current).add(postId));
 
       try {
-        await toggleSave(postId, accessToken);
+        await toggleSave(postId, nextSaved, accessToken);
         setSavedPostIds((current) => {
           const next = new Set(current);
           if (nextSaved) next.add(postId);

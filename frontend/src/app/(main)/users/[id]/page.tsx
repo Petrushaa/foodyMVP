@@ -66,7 +66,7 @@ export default async function UserProfile({
   }
 
   const [postsData, userProfile] = await Promise.all([
-    apiRequest(`/posts/user_posts/?user_id=${id}`, options).catch(() => ({ results: [] })),
+    apiRequest(`/posts/?author=${id}`, options).catch(() => ({ results: [] })),
     apiRequest(`/users/${id}/`, options).catch(() => null),
   ]);
 

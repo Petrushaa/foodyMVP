@@ -35,7 +35,7 @@ export function SinglePostView({
       if (!accessToken || likePending) return;
       setLikePending(true);
       try {
-        await toggleLike(post.id, accessToken);
+        await toggleLike(post.id, nextLiked, accessToken);
         setLiked(nextLiked);
       } catch {
         /* ignore */
@@ -51,7 +51,7 @@ export function SinglePostView({
       if (!accessToken || savePending) return;
       setSavePending(true);
       try {
-        await toggleSave(post.id, accessToken);
+        await toggleSave(post.id, nextSaved, accessToken);
         setSaved(nextSaved);
       } catch {
         /* ignore */
