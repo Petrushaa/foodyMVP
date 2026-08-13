@@ -101,7 +101,8 @@ export function mapDjangoPostToDish(post: any): Dish {
             id: post.user?.id?.toString() || "unknown",
             name: post.user?.full_name || post.user?.username || "Аноним",
             username: post.user?.username || "user",
-            avatar: fixMediaUrl(post.user?.avatar) || "/default-avatar.svg",
+            // Пусто — значит компонент нарисует букву. Единая заглушка на весь проект.
+            avatar: fixMediaUrl(post.user?.avatar),
             bio: post.user?.bio,
         },
         restaurant: {

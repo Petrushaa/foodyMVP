@@ -2,7 +2,8 @@ export interface User {
     id: string;
     name: string;
     username?: string;
-    avatar: string;
+    /** Пусто — компонент нарисует букву. Единая заглушка на весь проект. */
+    avatar?: string;
     bio?: string;
     stats?: {
         posts: number;

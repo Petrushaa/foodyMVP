@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import Link from "next/link";
 import { Settings as SettingsIcon, MapPin, ShieldCheck, Clock, AlertTriangle } from "lucide-react";
 import { apiRequest, fixAvatarUrl, mapDjangoPostToDish } from "@/lib/api";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { UserAvatar } from "@/components/feed/user-avatar";
 import { GlassSurface } from "@/components/feed/glass-surface";
 
 export const dynamic = "force-dynamic";
@@ -132,12 +132,14 @@ export default async function MePage({
 
           <GlassSurface className="rounded-[26px] border border-white/65 bg-white/45 px-5 py-6 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
             <div className="flex flex-col items-center text-center">
-              <Avatar className="size-22 border-2 border-[#2ECC71] shadow-[0_10px_28px_rgba(20,40,28,0.18)] after:hidden">
-                {avatar ? <AvatarImage src={avatar} alt={name} /> : null}
-                <AvatarFallback className="bg-white text-[24px] font-extrabold text-[#15291C]">
-                  {name.charAt(0).toUpperCase()}
-                </AvatarFallback>
-              </Avatar>
+              {/* Тот же компонент, что в ленте и комментариях, — иначе заглушки
+                  разъезжаются: где-то буква, где-то серый силуэт. */}
+              <UserAvatar
+                name={name}
+                src={avatar}
+                size={88}
+                className="border-2 shadow-[0_10px_28px_rgba(20,40,28,0.18)]"
+              />
 
               <h2 className="mt-3 text-[22px] font-extrabold tracking-[-0.3px] text-[#15291C]">
                 {name}
