@@ -171,9 +171,11 @@ class PostListSerializer(serializers.ModelSerializer):
         model = Post
         fields = [
             'id', 'user', 'menu_item', 'description', 'size', 'author_rating',
-            'images', 'statistics', 'tags', 'created_at',
+            'images', 'statistics', 'tags', 'created_at', 'city',
             'status', 'rejection_reason', 'is_liked', 'is_saved', 'is_editable',
         ]
+        # Город снимается с профиля автора при создании и потом не меняется.
+        read_only_fields = ['city']
 
     def _user(self):
         request = self.context.get('request')
@@ -348,6 +350,7 @@ class PostCreateSerializer(serializers.ModelSerializer):
         name = (attrs.get('menu_item_name') or '').strip()
 
         self._check_daily_limit(user)
+        self._check_city(user)
 
         if menu_item and name:
             raise serializers.ValidationError(
@@ -360,6 +363,19 @@ class PostCreateSerializer(serializers.ModelSerializer):
             self._validate_new_position(attrs, name)
 
         return attrs
+
+    def _check_city(self, user):
+        """
+        Без города в профиле пост писать нельзя.
+
+        Лента разделена по городам, и пост без города не попал бы ни в одну —
+        человек бы писал в пустоту и не понимал, почему его никто не видит.
+        """
+        if not (user.city or '').strip():
+            raise serializers.ValidationError(
+                'Укажите город в профиле — лента у каждого города своя, '
+                'и без него пост никому не покажется.'
+            )
 
     def _check_daily_limit(self, user):
         """

@@ -8,19 +8,25 @@ from posts.models import DishType, Post, Restaurant
 User = get_user_model()
 
 
+# Город обязателен: лента разделена по городам, и без него пост не создать.
+CITY = 'Москва'
+
+
 @pytest.fixture
 def author(db):
-    return User.objects.create_user('author', 'author@test.ru', 'pass12345')
+    return User.objects.create_user('author', 'author@test.ru', 'pass12345', city=CITY)
 
 
 @pytest.fixture
 def other_author(db):
-    return User.objects.create_user('other', 'other@test.ru', 'pass12345')
+    return User.objects.create_user('other', 'other@test.ru', 'pass12345', city=CITY)
 
 
 @pytest.fixture
 def moderator(db):
-    return User.objects.create_user('moder', 'moder@test.ru', 'pass12345', is_staff=True)
+    return User.objects.create_user(
+        'moder', 'moder@test.ru', 'pass12345', is_staff=True, city=CITY,
+    )
 
 
 @pytest.fixture

@@ -15,7 +15,7 @@ from rest_framework import permissions, status, viewsets
 from rest_framework.exceptions import PermissionDenied
 from rest_framework.response import Response
 
-from ..models import Post, PostLike, PostSave
+from ..models import Post, PostLike, PostSave, normalize_name
 from ..serializers import (
     PostCreateSerializer, PostListSerializer, PostUpdateSerializer,
 )
@@ -64,7 +64,33 @@ class PostViewSet(viewsets.ModelViewSet):
             )
 
         queryset = queryset.filter(self._visibility(user))
-        return self._apply_feed(self._apply_search(queryset))
+        return self._apply_feed(self._apply_search(self._apply_city(queryset)))
+
+    def _apply_city(self, queryset):
+        """
+        Лента и поиск показывают только свой город.
+
+        Город берётся из профиля смотрящего и сравнивается с городом, который
+        был у автора, когда он писал. Переехал — сразу видишь новый город, а
+        старые свои посты остаются в прежнем.
+
+        Не сужаем там, где человек смотрит на что-то конкретное: свой профиль
+        и чужой, сохранённое, прямая ссылка на пост. Иначе переехавший потерял
+        бы из виду собственные посты, а сохранённое опустело бы наполовину.
+
+        Гостю и тому, кто не указал город, показываем всё: фильтровать не по чему,
+        а пустая лента выглядела бы поломкой.
+        """
+        if self.action != 'list':
+            return queryset
+
+        params = self.request.query_params
+        if params.get('author') or params.get('menu_item') or params.get('feed') == 'saved':
+            return queryset
+
+        user = self.request.user
+        city = normalize_name(user.city) if user.is_authenticated else ''
+        return queryset.filter(normalized_city=city) if city else queryset
 
     def _visibility(self, user):
         """Какие посты человек вправе увидеть в текущем запросе."""

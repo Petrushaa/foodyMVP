@@ -616,6 +616,16 @@ class Post(SoftDeleteModel):
         related_name='posts', verbose_name='Позиция'
     )
 
+    # Город автора на момент публикации — по нему пост попадает в чью-то ленту.
+    # Именно снимок, а не ссылка на профиль: человек переезжает, а написанное
+    # остаётся у того города, о котором писалось. Поэтому поле не меняется даже
+    # при правке поста.
+    city = models.CharField(max_length=100, blank=True, verbose_name='Город')
+    normalized_city = models.CharField(
+        max_length=100, blank=True, db_index=True, editable=False,
+        verbose_name='Ключ города'
+    )
+
     # --- Заявка на размещение: заполняется, когда позиции ещё нет в каталоге ---
     draft_restaurant_source = models.CharField(
         max_length=16, choices=Restaurant.SOURCE_CHOICES, default=Restaurant.SOURCE_YANDEX,
@@ -713,11 +723,26 @@ class Post(SoftDeleteModel):
         indexes = [
             models.Index(fields=['-created_at']),
             models.Index(fields=['status', '-created_at']),
+            # Основной запрос ленты: город + статус, свежие сверху.
+            models.Index(fields=['normalized_city', 'status', '-created_at']),
         ]
 
     def __str__(self):
         author = self.user.username if self.user else 'аноним'
         return f'Пост {self.pk} от {author}'
+
+    def save(self, *args, **kwargs):
+        """
+        Город проставляется один раз — при создании, из профиля автора.
+
+        Дальше он живёт своей жизнью: автор переезжает, меняет город в
+        настройках, правит этот же пост — город поста не двигается. Поэтому
+        берём его только для новой записи.
+        """
+        if self._state.adding and not self.city and self.user_id:
+            self.city = self.user.city or ''
+        self.normalized_city = normalize_name(self.city)
+        super().save(*args, **kwargs)
 
     @property
     def is_editable(self):
