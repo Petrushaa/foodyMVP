@@ -7,6 +7,7 @@
 import pytest
 
 from posts.models import MenuItem, MenuItemAlias
+from posts.services.moderation import approve_post
 from posts.services.search import fix_layout, search_menu_items, transliterate
 
 
@@ -85,3 +86,72 @@ class TestSearch:
         assert cheeseburger in search_menu_items(
             'Чиз Бургер', restaurant=restaurant, include_empty=True,
         )
+
+
+@pytest.mark.django_db
+class TestMenuItemSearchApi:
+    """
+    Вкладка поиска ищет позиции, а не посты. Выдача сужена городом и фильтрами,
+    и поиск работает уже внутри неё.
+    """
+
+    URL = '/api/v1/menu-items/'
+
+    def _published(self, make_post, author, moderator, **kwargs):
+        return approve_post(make_post(author, **kwargs), moderator).menu_item
+
+    def test_finds_position_by_name(self, api_client, author, moderator, make_post):
+        self._published(make_post, author, moderator, item='Чизбургер')
+
+        response = api_client.get(f'{self.URL}?search=чизбургер')
+
+        assert response.data['count'] == 1
+        assert response.data['results'][0]['name'] == 'Чизбургер'
+
+    def test_finds_by_typo_and_layout(self, api_client, author, moderator, make_post):
+        """Тот же умный поиск, что при создании поста: опечатки и раскладка."""
+        self._published(make_post, author, moderator, item='Бургер')
+
+        assert api_client.get(f'{self.URL}?search=бургир').data['count'] == 1
+        assert api_client.get(f'{self.URL}?search=,ehuth').data['count'] == 1
+
+    def test_search_is_limited_to_own_city(self, api_client, author, other_author,
+                                           moderator, make_post):
+        other_author.city = 'Казань'
+        other_author.save(update_fields=['city'])
+        self._published(make_post, other_author, moderator, item='Чизбургер',
+                        restaurant_name='Казанская', address='Баумана 1', city='Казань')
+
+        api_client.force_authenticate(author)  # Москва
+        assert api_client.get(f'{self.URL}?search=чизбургер').data['count'] == 0
+
+    def test_guest_sees_every_city(self, api_client, author, moderator, make_post):
+        self._published(make_post, author, moderator, item='Чизбургер')
+
+        assert api_client.get(f'{self.URL}?search=чизбургер').data['count'] == 1
+
+    def test_price_filter_narrows_search(self, api_client, author, moderator, make_post):
+        self._published(make_post, author, moderator, item='Чизбургер', price=200)
+
+        assert api_client.get(f'{self.URL}?search=чизбургер&price_max=100').data['count'] == 0
+        assert api_client.get(f'{self.URL}?search=чизбургер&price_min=100').data['count'] == 1
+
+    def test_category_filter_narrows_search(self, api_client, author, moderator, make_post):
+        item = self._published(make_post, author, moderator, item='Чизбургер')
+        taxon = item.taxons.first()
+
+        assert api_client.get(f'{self.URL}?category_id={taxon.id}').data['count'] == 1
+        assert api_client.get(f'{self.URL}?category_id=999999').data['count'] == 0
+
+    def test_results_carry_photo_and_price(self, api_client, author, moderator, make_post):
+        """Плитке нужны фото, цена и оценка — иначе её нечем рисовать."""
+        self._published(make_post, author, moderator, item='Чизбургер', price=350)
+
+        item = api_client.get(f'{self.URL}?search=чизбургер').data['results'][0]
+        assert 'photo' in item and item['price'] == '350.00'
+        assert 'rating_raw' in item and 'restaurant' in item
+
+    def test_nothing_found_returns_empty(self, api_client, author, moderator, make_post):
+        self._published(make_post, author, moderator, item='Чизбургер')
+
+        assert api_client.get(f'{self.URL}?search=щщыыъъ').data['count'] == 0

@@ -84,9 +84,19 @@ def _base_queryset(restaurant=None):
     return queryset
 
 
-def search_menu_items(text, *, restaurant=None, limit=10, include_empty=False):
+def _cut(queryset, limit):
+    """Срез только когда лимит задан: срезанный queryset дальше не отфильтровать."""
+    return queryset[:limit] if limit else queryset
+
+
+def search_menu_items(text, *, queryset=None, restaurant=None, limit=10,
+                      include_empty=False):
     """
     Ищет позиции по названию, поднимаясь по лесенке способов.
+
+    `queryset` — на чём искать. Нужен странице поиска: там выдача уже сужена
+    городом, категорией и ценой, и искать надо внутри неё, а не по всей базе.
+    `limit=None` — не резать выдачу, отдать queryset под пагинацию.
 
     `include_empty=True` — искать и среди позиций без постов. Нужно при создании
     поста: иначе человек не найдёт позицию, у которой пока нет одобренных постов,
@@ -96,11 +106,12 @@ def search_menu_items(text, *, restaurant=None, limit=10, include_empty=False):
     if not text:
         return MenuItem.objects.none()
 
-    queryset = _base_queryset(restaurant)
-    if include_empty:
-        queryset = MenuItem.objects.filter(status=MenuItem.STATUS_ACTIVE)
-        if restaurant is not None:
-            queryset = queryset.filter(restaurant=restaurant)
+    if queryset is None:
+        queryset = _base_queryset(restaurant)
+        if include_empty:
+            queryset = MenuItem.objects.filter(status=MenuItem.STATUS_ACTIVE)
+            if restaurant is not None:
+                queryset = queryset.filter(restaurant=restaurant)
 
     variants = query_variants(text)
     if not variants:
@@ -109,7 +120,7 @@ def search_menu_items(text, *, restaurant=None, limit=10, include_empty=False):
     # 1. Точное совпадение — самый желанный результат.
     exact = queryset.filter(normalized_name__in=variants)
     if exact.exists():
-        return exact.select_related('restaurant')[:limit]
+        return _cut(exact.select_related('restaurant'), limit)
 
     # 2. Синонимы, которые ведёт модератор.
     alias_ids = MenuItemAlias.objects.filter(
@@ -118,7 +129,7 @@ def search_menu_items(text, *, restaurant=None, limit=10, include_empty=False):
     if alias_ids:
         by_alias = queryset.filter(id__in=list(alias_ids))
         if by_alias.exists():
-            return by_alias.select_related('restaurant')[:limit]
+            return _cut(by_alias.select_related('restaurant'), limit)
 
     # 3. Начало названия — «бург» должно находить «бургер» ещё до триграмм.
     prefix = Q()
@@ -126,7 +137,7 @@ def search_menu_items(text, *, restaurant=None, limit=10, include_empty=False):
         prefix |= Q(normalized_name__startswith=variant)
     by_prefix = queryset.filter(prefix)
     if by_prefix.exists():
-        return by_prefix.select_related('restaurant').order_by('-rating')[:limit]
+        return _cut(by_prefix.select_related('restaurant').order_by('-rating'), limit)
 
     # 4. Нечёткий поиск по триграммам — ловит опечатки.
     similarity = None
@@ -134,12 +145,13 @@ def search_menu_items(text, *, restaurant=None, limit=10, include_empty=False):
         expression = TrigramSimilarity('normalized_name', variant)
         similarity = expression if similarity is None else Greatest(similarity, expression)
 
-    return (
+    return _cut(
         queryset
         .annotate(similarity=similarity)
         .filter(similarity__gt=TRIGRAM_THRESHOLD)
         .select_related('restaurant')
-        .order_by('-similarity', '-rating')[:limit]
+        .order_by('-similarity', '-rating'),
+        limit,
     )
 
 

@@ -2,17 +2,14 @@ import { auth } from "@/auth";
 import { apiRequest } from "@/lib/api";
 import { GlassSurface } from "@/components/feed/glass-surface";
 import { SaveRecentSearchQuery } from "@/components/search/save-recent-search-query";
-import { SearchResultsFeed } from "@/components/search/search-results-feed";
+import { MenuItemTile } from "@/components/catalog/menu-item-tile";
 import { SearchResultsHeader } from "@/components/search/search-results-header";
-import { DEFAULT_TWEAKS } from "@/lib/tweaks";
-import { mapApiPostToFeedPost, type ApiPost } from "@/lib/feed-adapter";
 import {
   getCuisineCategories,
   getDishCategories,
   getDietCategories,
   getFormCategories,
   getFormatCategories,
-  getPlaceCategories,
 } from "@/lib/categories";
 import type { CategoryGroups } from "@/components/search/results-category-control";
 import {
@@ -68,39 +65,18 @@ export default async function SearchResultsPage({
   if (categoryId) qs.set("category_id", categoryId);
   if (priceMin) qs.set("price_min", priceMin);
   if (priceMax) qs.set("price_max", priceMax);
-  const endpoint = qs.toString() ? `/posts/?${qs.toString()}` : "/posts/";
+  // Ищем позиции, а не посты: человек ищет блюдо, а не чью-то запись о нём.
+  // Бэкенд сужает выдачу городом сам, по профилю смотрящего.
+  const endpoint = qs.toString() ? `/menu-items/?${qs.toString()}` : "/menu-items/";
 
-  let apiPosts: ApiPost[] = [];
-  let hasMore = false;
+  let items: any[] = [];
   try {
     const options: any = { headers: {} };
     if (accessToken) options.headers.Authorization = `Bearer ${accessToken}`;
     const data = await apiRequest(endpoint, options);
-    const results = Array.isArray(data?.results)
-      ? data.results
-      : Array.isArray(data)
-      ? data
-      : [];
-    apiPosts = results as ApiPost[];
-    hasMore = Boolean(data?.next);
+    items = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
   } catch {
     /* ignore — отдадим пустые результаты */
-  }
-
-  const posts = apiPosts.map(mapApiPostToFeedPost);
-  const likedPostIds = apiPosts.filter((p) => p.is_liked).map((p) => p.id);
-  const savedPostIds = apiPosts.filter((p) => p.is_saved).map((p) => p.id);
-
-  let currentUserHandle: string | null = null;
-  if (accessToken) {
-    try {
-      const me = await apiRequest("/users/me/", {
-        headers: { Authorization: `Bearer ${accessToken}` },
-      });
-      currentUserHandle = me?.username ? `@${me.username}` : null;
-    } catch {
-      /* ignore */
-    }
   }
 
   return (
@@ -115,22 +91,18 @@ export default async function SearchResultsPage({
 
         <section
           aria-label="Результаты поиска"
-          className="hide-scroll flex-1 snap-y snap-mandatory overflow-y-auto pb-24"
+          className="hide-scroll flex-1 overflow-y-auto px-4 pt-2 pb-24"
         >
-          {posts.length > 0 ? (
-            <SearchResultsFeed
-              brand={DEFAULT_TWEAKS.brand}
-              currentUser={currentUserHandle}
-              accessToken={accessToken ? "authed" : null}
-              density={DEFAULT_TWEAKS.density}
-              initialFollowingUsers={[]}
-              initialLikedPostIds={likedPostIds}
-              initialSavedPostIds={savedPostIds}
-              posts={posts}
-              hasMore={hasMore}
-            />
+          {items.length > 0 ? (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              {items.map((item) => (
+                // Заведение подписываем: в выдаче попадаются одинаковые блюда
+                // из разных мест, и без места их не различить.
+                <MenuItemTile key={item.id} item={item} showPlace />
+              ))}
+            </div>
           ) : (
-            <div className="flex h-full snap-start snap-always flex-col px-3.5 pt-2 pb-[5.75rem]">
+            <div className="flex h-full flex-col pb-[5.75rem]">
               <GlassSurface className="mt-2 flex flex-1 items-center justify-center rounded-[26px] border border-green-50/92 bg-white/45">
                 <div className="max-w-[260px] px-6 text-center">
                   <p className="text-[20px] leading-tight font-extrabold tracking-[-0.35px] text-[#15291C]">
@@ -138,8 +110,8 @@ export default async function SearchResultsPage({
                   </p>
                   <p className="mt-2 font-[family-name:var(--font-roboto)] text-[14.5px] leading-[1.45] font-medium text-[#5C6B62]">
                     {normalizedQuery
-                      ? `По запросу «${query.trim()}» пока нет постов.`
-                      : "Введите запрос, чтобы собрать ленту результатов."}
+                      ? `По запросу «${query.trim()}» в вашем городе ничего нет.`
+                      : "Введите запрос, чтобы найти блюдо."}
                   </p>
                 </div>
               </GlassSurface>

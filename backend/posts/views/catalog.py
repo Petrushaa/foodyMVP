@@ -6,6 +6,8 @@
 (пост, лайк, комментарий) остаются только для залогиненных.
 """
 
+from decimal import Decimal, InvalidOperation
+
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
@@ -13,7 +15,7 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import DishType, MenuItem, Restaurant, Tag, Taxon
+from ..models import DishType, MenuItem, Restaurant, Tag, Taxon, normalize_name
 from ..serializers import (
     DishTypeSerializer, MenuItemDetailSerializer, MenuItemSerializer,
     PostListSerializer, RestaurantSerializer, TagSerializer, TaxonSerializer,
@@ -128,7 +130,45 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
         if restaurant_id:
             queryset = queryset.filter(restaurant_id=restaurant_id)
 
-        return queryset.distinct().order_by('-rating')
+        # Категория страницы поиска приходит числом — это таксон любой из осей.
+        category_id = self.request.query_params.get('category_id')
+        if category_id and category_id.isdigit():
+            queryset = queryset.filter(taxons__id=category_id)
+
+        for param, lookup in (('price_min', 'gte'), ('price_max', 'lte')):
+            value = self.request.query_params.get(param)
+            if value:
+                try:
+                    queryset = queryset.filter(**{f'price__{lookup}': Decimal(value)})
+                except (InvalidOperation, TypeError):
+                    pass  # мусор в адресной строке — просто игнорируем фильтр
+
+        queryset = self._apply_city(queryset).distinct().order_by('-rating')
+
+        # Поиск идёт последним и по уже суженной выдаче: искать надо среди того,
+        # что человеку и так показали бы, а не по всей базе.
+        text = (self.request.query_params.get('search') or '').strip()
+        if text:
+            return search_menu_items(text, queryset=queryset, limit=None)
+        return queryset
+
+    def _apply_city(self, queryset):
+        """
+        Поиск по позициям ограничен своим городом — как и лента.
+
+        Иначе человек искал бы блюдо и получал заведения, до которых тысяча
+        километров. Смотрим на город заведения: у позиции своего города нет.
+
+        Конкретное заведение — исключение: туда приходят по ссылке, и прятать
+        его меню из-за города было бы странно. Гость и тот, кто не указал город,
+        видят всё.
+        """
+        if self.request.query_params.get('restaurant'):
+            return queryset
+
+        user = self.request.user
+        city = normalize_name(user.city) if user.is_authenticated else ''
+        return queryset.filter(restaurant__normalized_city=city) if city else queryset
 
     @action(detail=False, methods=['get'], permission_classes=[permissions.IsAuthenticated])
     def search(self, request):
