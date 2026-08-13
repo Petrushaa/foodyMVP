@@ -224,3 +224,85 @@ class TestVisibility:
         api_client.force_authenticate(other_author)
 
         assert api_client.get(POSTS_URL).data['count'] == 0
+
+
+@pytest.mark.django_db
+class TestSearchAndFilters:
+    """
+    Страница результатов шлёт эти параметры — без поддержки на сервере она
+    молча отдавала всю ленту на любой запрос.
+    """
+
+    def _approved(self, make_post, author, moderator, **kwargs):
+        return approve_post(make_post(author, **kwargs), moderator)
+
+    def test_search_finds_by_dish_name(self, api_client, author, moderator, make_post):
+        self._approved(make_post, author, moderator, item='Чизбургер')
+        self._approved(make_post, author, moderator, item='Борщ',
+                       restaurant_name='Столовая', address='Мира 3')
+
+        response = api_client.get(f'{POSTS_URL}?search=чизбург')
+
+        assert response.data['count'] == 1
+        assert response.data['results'][0]['menu_item']['name'] == 'Чизбургер'
+
+    def test_search_finds_by_restaurant_name(self, api_client, author, moderator, make_post):
+        self._approved(make_post, author, moderator, restaurant_name='Бургерная')
+        self._approved(make_post, author, moderator, item='Борщ',
+                       restaurant_name='Столовая', address='Мира 3')
+
+        assert api_client.get(f'{POSTS_URL}?search=столов').data['count'] == 1
+
+    def test_search_without_matches_returns_nothing(self, api_client, author, moderator,
+                                                     make_post):
+        """Раньше бессмысленный запрос возвращал всю ленту."""
+        self._approved(make_post, author, moderator)
+
+        assert api_client.get(f'{POSTS_URL}?search=щщщыыыъъъ').data['count'] == 0
+
+    def test_search_does_not_duplicate_post_with_many_tags(self, api_client, author,
+                                                            moderator, make_post):
+        post = self._approved(make_post, author, moderator, item='Пицца пепперони')
+        post.tags.create(name='пицца')
+
+        response = api_client.get(f'{POSTS_URL}?search=пицца')
+        assert response.data['count'] == 1
+
+    def test_filter_by_tag_name(self, api_client, author, moderator, make_post):
+        post = self._approved(make_post, author, moderator)
+        post.tags.create(name='остро')
+        self._approved(make_post, author, moderator, item='Борщ',
+                       restaurant_name='Столовая', address='Мира 3')
+
+        assert api_client.get(f'{POSTS_URL}?tag_name=остро').data['count'] == 1
+        assert api_client.get(f'{POSTS_URL}?tag_name=%23остро').data['count'] == 1, 'решётку срезаем'
+
+    def test_filter_by_price_range(self, api_client, author, moderator, make_post):
+        self._approved(make_post, author, moderator, price=200)
+        self._approved(make_post, author, moderator, item='Стейк',
+                       restaurant_name='Мясная', address='Мира 3', price=1500)
+
+        assert api_client.get(f'{POSTS_URL}?price_max=500').data['count'] == 1
+        assert api_client.get(f'{POSTS_URL}?price_min=1000').data['count'] == 1
+        assert api_client.get(f'{POSTS_URL}?price_min=100&price_max=2000').data['count'] == 2
+
+    def test_broken_price_is_ignored_not_500(self, api_client, author, moderator, make_post):
+        self._approved(make_post, author, moderator)
+
+        response = api_client.get(f'{POSTS_URL}?price_min=дорого')
+
+        assert response.status_code == 200
+        assert response.data['count'] == 1
+
+    def test_filter_by_category(self, api_client, author, moderator, make_post):
+        post = self._approved(make_post, author, moderator)
+        taxon = post.menu_item.taxons.first()
+
+        assert api_client.get(f'{POSTS_URL}?category_id={taxon.id}').data['count'] == 1
+        assert api_client.get(f'{POSTS_URL}?category_id=999999').data['count'] == 0
+
+    def test_filters_do_not_expose_pending_posts(self, api_client, author, make_post):
+        """Фильтр не должен становиться лазейкой в чужую модерацию."""
+        make_post(author, item='Секретный чизбургер')
+
+        assert api_client.get(f'{POSTS_URL}?search=секретный').data['count'] == 0

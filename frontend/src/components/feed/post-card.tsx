@@ -37,32 +37,8 @@ import { useRouter } from "next/navigation";
 
 import { getTagSearchHref } from "@/lib/search";
 import { type Density, type Post, type PostComment } from "@/lib/mock-data";
+import { fetchPostComments } from "@/lib/comments-api";
 
-// CSR fetch через BFF-прокси: он подставит токен из сессии, и вместе с текстом
-// придут лайки комментариев (`is_liked`) — иначе сердечки пришлось бы догружать
-// отдельным запросом.
-async function fetchPostComments(postId: number): Promise<PostComment[]> {
-  try {
-    const res = await fetch(`/backend/comments?post=${postId}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const rawComments: any[] = Array.isArray(data?.results) ? data.results : Array.isArray(data) ? data : [];
-    return rawComments.map((c: any) => ({
-      id: c.id,
-      user: c.user_detail?.username ? `@${c.user_detail.username}` : "@unknown",
-      realName: c.user_detail?.full_name || c.user_detail?.username || "Аноним",
-      avatarUrl: c.user_detail?.avatar || undefined,
-      when: c.created_at ? new Date(c.created_at).toLocaleDateString("ru-RU") : "",
-      text: c.text || "",
-      likes: c.likes_count ?? 0,
-      liked: Boolean(c.is_liked),
-    }));
-  } catch {
-    return [];
-  }
-}
 
 type PostCardProps = {
   post: Post;

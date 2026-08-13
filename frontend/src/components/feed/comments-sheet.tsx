@@ -16,9 +16,7 @@ import { useSession } from "next-auth/react";
 import { createPortal } from "react-dom";
 
 import { UserAvatar } from "@/components/feed/user-avatar";
-import {
-  requestCommentLikeMutation,
-} from "@/lib/feed-api";
+import { toggleCommentLike } from "@/lib/feed-client";
 import type { PostComment } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import { createComment, deleteComment } from "@/app/actions/post";
@@ -445,11 +443,9 @@ export function CommentsSheet({
     });
 
     try {
-      const result = await requestCommentLikeMutation(comment.id, nextLiked, accessToken);
+      const result = await toggleCommentLike(comment.id, nextLiked, accessToken);
 
-      // Reconcile with server: if server disagrees, flip state back.
-      // NOTE: requestCommentLikeMutation always returns likedCommentIds: [],
-      // so do NOT replace the whole set — only adjust this one comment.
+      // Сверяемся с сервером: правим только этот комментарий, не весь набор.
       setLikedCommentIds((currentCommentIds) => {
         const nextCommentIds = new Set(currentCommentIds);
         if (result.liked) {

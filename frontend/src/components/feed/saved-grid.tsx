@@ -11,6 +11,7 @@ import { toggleLike, toggleSave, toggleFollow } from "@/lib/feed-client";
 import type { Post, PostComment } from "@/lib/mock-data";
 import { DEFAULT_TWEAKS } from "@/lib/tweaks";
 import { cn } from "@/lib/utils";
+import { fetchPostComments } from "@/lib/comments-api";
 
 const TWEAKS = DEFAULT_TWEAKS;
 
@@ -23,33 +24,6 @@ type SavedGridProps = {
   initialFollowingUsers?: string[];
 };
 
-// CSR-подгрузка комментариев для открытого поста (тот же путь, что в PostCard).
-async function fetchPostComments(postId: number): Promise<PostComment[]> {
-  try {
-    const res = await fetch(`/backend/comments?post=${postId}`, {
-      cache: "no-store",
-    });
-    if (!res.ok) return [];
-    const data = await res.json();
-    const rawComments: any[] = Array.isArray(data?.results)
-      ? data.results
-      : Array.isArray(data)
-        ? data
-        : [];
-    return rawComments.map((c: any) => ({
-      id: c.id,
-      user: c.user_detail?.username ? `@${c.user_detail.username}` : "@unknown",
-      realName: c.user_detail?.full_name || c.user_detail?.username || "Аноним",
-      avatarUrl: c.user_detail?.avatar || undefined,
-      when: c.created_at ? new Date(c.created_at).toLocaleDateString("ru-RU") : "",
-      text: c.text || "",
-      likes: c.likes_count ?? 0,
-      liked: Boolean(c.is_liked),
-    }));
-  } catch {
-    return [];
-  }
-}
 
 function SavedTile({
   post,

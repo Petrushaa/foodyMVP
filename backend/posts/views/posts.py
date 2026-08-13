@@ -8,6 +8,8 @@
 - **Чужие неодобренные посты не видны никому**, кроме автора и модератора.
 """
 
+from decimal import Decimal, InvalidOperation
+
 from django.db.models import Prefetch, Q
 from rest_framework import permissions, status, viewsets
 from rest_framework.exceptions import PermissionDenied
@@ -61,7 +63,8 @@ class PostViewSet(viewsets.ModelViewSet):
                          to_attr='prefetched_saves'),
             )
 
-        return self._apply_feed(queryset.filter(self._visibility(user)))
+        queryset = queryset.filter(self._visibility(user))
+        return self._apply_feed(self._apply_search(queryset))
 
     def _visibility(self, user):
         """Какие посты человек вправе увидеть в текущем запросе."""
@@ -77,6 +80,50 @@ class PostViewSet(viewsets.ModelViewSet):
         author = self.request.query_params.get('author')
         is_own_feed = author == 'me' or (author or '').isdigit() and int(author) == user.id
         return visible | Q(user=user) if is_own_feed else visible
+
+    def _apply_search(self, queryset):
+        """
+        Поиск и фильтры страницы результатов.
+
+        - `?search=` — по названию блюда, заведению, типу блюда, тегам и описанию;
+        - `?tag_name=` — по конкретному тегу (переход по «#тег»);
+        - `?category_id=` — по категории позиции (таксон любой из четырёх осей);
+        - `?price_min=` / `?price_max=` — по цене позиции.
+
+        Фильтруем по позиции, а не по черновым полям поста: в выдаче только
+        одобренные посты, а у них позиция уже проставлена.
+        """
+        params = self.request.query_params
+
+        search = (params.get('search') or '').strip()
+        if search:
+            queryset = queryset.filter(
+                Q(menu_item__name__icontains=search)
+                | Q(menu_item__restaurant__name__icontains=search)
+                | Q(menu_item__dish_type__name__icontains=search)
+                | Q(tags__name__icontains=search)
+                | Q(description__icontains=search)
+            ).distinct()
+
+        tag_name = (params.get('tag_name') or '').strip().lstrip('#')
+        if tag_name:
+            queryset = queryset.filter(tags__name__iexact=tag_name)
+
+        category_id = params.get('category_id')
+        if category_id and category_id.isdigit():
+            queryset = queryset.filter(menu_item__taxons__id=category_id)
+
+        for param, lookup in (('price_min', 'gte'), ('price_max', 'lte')):
+            value = params.get(param)
+            if value:
+                try:
+                    queryset = queryset.filter(**{f'menu_item__price__{lookup}': Decimal(value)})
+                except (InvalidOperation, TypeError):
+                    # Мусор в адресной строке — не повод отдавать 500,
+                    # просто игнорируем негодный фильтр.
+                    pass
+
+        return queryset
 
     def _apply_feed(self, queryset):
         """

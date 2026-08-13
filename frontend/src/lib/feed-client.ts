@@ -37,6 +37,31 @@ export async function toggleSave(postId: number, nextSaved: boolean, _token?: st
   return res.json().catch(() => ({}));
 }
 
+/**
+ * Лайк комментария. Как и у поста: POST ставит, DELETE снимает, ответ — `active`.
+ *
+ * Ошибку не пробрасываем, а возвращаем прежнее состояние: сердечко на
+ * комментарии не то, ради чего стоит показывать пользователю сбой.
+ */
+export async function toggleCommentLike(
+  commentId: number | string,
+  nextLiked: boolean,
+  authed?: string | null,
+) {
+  if (!authed) return { commentId, liked: nextLiked };
+
+  try {
+    const res = await beFetch(`/comments/${commentId}/like`, {
+      method: nextLiked ? "POST" : "DELETE",
+    });
+    if (!res.ok) throw new Error(`comment like failed: ${res.status}`);
+    const data = await res.json().catch(() => ({}));
+    return { commentId, liked: Boolean(data?.active ?? nextLiked) };
+  } catch {
+    return { commentId, liked: !nextLiked }; // откатываем оптимистичный апдейт
+  }
+}
+
 export async function toggleFollow(
   username: string,
   targetUserId: number | null,

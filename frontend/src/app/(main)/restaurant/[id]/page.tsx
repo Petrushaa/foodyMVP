@@ -4,6 +4,16 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { apiRequest } from "@/lib/api";
 import { GlassSurface } from "@/components/feed/glass-surface";
 
+/** «1 пост», «2 поста», «5 постов». */
+function plural(n: number, one: string, few: string, many: string) {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  const mod10 = n % 10;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
+}
+
 export default async function RestaurantPage({
   params,
 }: {
@@ -13,14 +23,15 @@ export default async function RestaurantPage({
   const session = (await auth()) as any;
   const accessToken: string | null = session?.user?.accessToken ?? null;
 
-  let restaurant: any = null;
-  try {
-    const options: any = { headers: {} };
-    if (accessToken) options.headers.Authorization = `Bearer ${accessToken}`;
-    restaurant = await apiRequest(`/restaurants/${id}/`, options);
-  } catch {
-    /* not found */
-  }
+  const options: any = { headers: {} };
+  if (accessToken) options.headers.Authorization = `Bearer ${accessToken}`;
+
+  // Меню запрашиваем сразу: без него страница заведения — это одна строка адреса.
+  const [restaurant, menu] = await Promise.all([
+    apiRequest(`/restaurants/${id}/`, options).catch(() => null),
+    apiRequest(`/restaurants/${id}/menu/`, options).catch(() => null),
+  ]);
+  const menuItems: any[] = Array.isArray(menu?.results) ? menu.results : [];
 
   if (!restaurant) {
     return (
@@ -35,10 +46,6 @@ export default async function RestaurantPage({
       </main>
     );
   }
-
-  const categories: string[] = (restaurant.categories || [])
-    .map((c: any) => (typeof c === "string" ? c : c?.name))
-    .filter(Boolean);
 
   return (
     <main className="absolute inset-0 overflow-hidden">
@@ -69,19 +76,47 @@ export default async function RestaurantPage({
               </div>
             )}
 
-            {categories.length > 0 && (
-              <div className="mt-4 flex flex-wrap gap-2">
-                {categories.map((c) => (
-                  <span
-                    key={c}
-                    className="rounded-full border border-white/65 bg-white/55 px-3 py-1 text-[12.5px] font-semibold text-[#15291C] shadow-[inset_1px_1px_0_rgba(255,255,255,0.7)]"
-                  >
-                    {c}
-                  </span>
-                ))}
-              </div>
+            {restaurant.posts_count > 0 && (
+              <p className="mt-3 text-[13px] font-medium text-[#5C6B62]">
+                {restaurant.posts_count}{" "}
+                {plural(restaurant.posts_count, "пост", "поста", "постов")}
+              </p>
             )}
           </GlassSurface>
+
+          <h2 className="mt-6 mb-1 px-1 text-[16px] font-extrabold tracking-[-0.2px] text-[#15291C]">
+            Что здесь ели
+          </h2>
+
+          <div className="mt-3 flex flex-col gap-2">
+            {menuItems.length === 0 ? (
+              <p className="py-8 text-center text-[14px] font-medium text-[#5C6B62]">
+                Пока ни одного блюда — ваш пост станет первым.
+              </p>
+            ) : (
+              menuItems.map((item) => (
+                <GlassSurface
+                  key={item.id} className="flex items-center justify-between gap-3 rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
+                    <div className="min-w-0">
+                      <div className="truncate text-[15px] font-extrabold tracking-[-0.2px] text-[#15291C]">
+                        {item.name}
+                      </div>
+                      <div className="truncate text-[12.5px] font-medium text-[#5C6B62]">
+                        {item.dish_type}
+                        {item.ratings_count > 0
+                          ? ` · ${(item.rating_raw / 2).toFixed(1)} из 5`
+                          : " · без оценок"}
+                      </div>
+                    </div>
+                    {item.price && (
+                      <div className="shrink-0 text-[15px] font-extrabold text-[#15291C]">
+                        ₽{Math.round(parseFloat(item.price))}
+                      </div>
+                    )}
+                </GlassSurface>
+              ))
+            )}
+          </div>
         </div>
       </div>
     </main>
