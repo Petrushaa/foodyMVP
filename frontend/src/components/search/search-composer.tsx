@@ -22,12 +22,14 @@ import { cn } from "@/lib/utils";
 const PRESS_CLASSES =
   "origin-center transition-transform duration-150 ease-out active:scale-[0.94] [-webkit-tap-highlight-color:transparent]";
 
-type Tab = "dishes" | "cuisines" | "formats";
+type Tab = "dishes" | "cuisines" | "formats" | "forms" | "diets";
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: "dishes", label: "Блюда" },
   { id: "cuisines", label: "Кухни" },
   { id: "formats", label: "Формат" },
+  { id: "forms", label: "Форма" },
+  { id: "diets", label: "Особенности" },
 ];
 
 type SearchComposerProps = {

@@ -15,14 +15,18 @@ export type CategoryGroups = {
   dishes: CategoryChip[];
   cuisines: CategoryChip[];
   formats: CategoryChip[];
+  forms: CategoryChip[];
+  diets: CategoryChip[];
 };
 
-type Tab = "dishes" | "cuisines" | "formats";
+type Tab = "dishes" | "cuisines" | "formats" | "forms" | "diets";
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: "dishes", label: "Блюда" },
   { id: "cuisines", label: "Кухни" },
   { id: "formats", label: "Формат" },
+  { id: "forms", label: "Форма" },
+  { id: "diets", label: "Особенности" },
 ];
 
 /**

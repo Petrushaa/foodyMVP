@@ -1,6 +1,6 @@
 import { apiRequest } from "@/lib/api";
 
-export type CategoryMode = "dishes" | "cuisines";
+export type CategoryMode = "dishes" | "cuisines" | "formats" | "forms" | "diets";
 
 export type FoodCategory = {
   id: string;
@@ -77,26 +77,6 @@ function pickCategoriesById(categories: FoodCategory[], ids: string[]) {
   });
 }
 
-export async function getDishCategories() {
-  // TODO: Replace mock data with the backend dish category dictionary endpoint.
-  return cloneCategories(DISH_CATEGORIES);
-}
-
-export async function getCuisineCategories() {
-  // TODO: Replace mock data with the backend cuisine category dictionary endpoint.
-  return cloneCategories(CUISINE_CATEGORIES);
-}
-
-export async function getPopularDishCategories() {
-  // TODO: Replace mock data with the backend popular dish categories endpoint.
-  return pickCategoriesById(DISH_CATEGORIES, POPULAR_DISH_CATEGORY_IDS);
-}
-
-export async function getPopularCuisineCategories() {
-  // TODO: Replace mock data with the backend popular cuisine categories endpoint.
-  return pickCategoriesById(CUISINE_CATEGORIES, POPULAR_CUISINE_CATEGORY_IDS);
-}
-
 /** Категория заведения (тип точки: фастфуд, кафе и т.п.). */
 export type PlaceCategory = {
   id: string;
@@ -119,6 +99,92 @@ const PLACE_CATEGORIES: PlaceCategory[] = [
   { id: "dessert", label: "Десерты", emoji: "🍰" },
   { id: "pub", label: "Паб", emoji: "🍻" },
 ];
+
+/**
+ * Справочники приходят с бэкенда: там 125 блюд и 58 категорий по четырём осям,
+ * и там же у каждой записи лежит иконка — её выбирает админ, а не разработчик.
+ *
+ * Локальные списки остались запасным вариантом: если бэкенд недоступен,
+ * экран не должен оказаться пустым.
+ */
+
+type ApiDishType = { id: number; name: string; emoji?: string };
+type ApiTaxon = { id: number; kind: string; name: string; slug: string; emoji?: string };
+
+async function loadDishTypes(): Promise<FoodCategory[] | null> {
+  try {
+    const data = await apiRequest("/dish-types/");
+    const list: ApiDishType[] = Array.isArray(data) ? data : (data?.results ?? []);
+    if (!list.length) return null;
+    // id — это название: форма создания поста отправляет его как есть,
+    // а сопоставить со своим справочником бэкенд умеет сам.
+    return list.map((item) => ({
+      id: item.name,
+      label: item.name,
+      emoji: item.emoji || "🍽️",
+      mode: "dishes" as const,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+async function loadTaxons(kind: string, mode: CategoryMode): Promise<FoodCategory[] | null> {
+  try {
+    const data = await apiRequest(`/taxons/?kind=${kind}`);
+    const list: ApiTaxon[] = Array.isArray(data) ? data : (data?.results ?? []);
+    if (!list.length) return null;
+    return list.map((item) => ({
+      id: item.slug,
+      label: item.name,
+      emoji: item.emoji || "🍽️",
+      mode,
+    }));
+  } catch {
+    return null;
+  }
+}
+
+export async function getDishCategories() {
+  return (await loadDishTypes()) ?? cloneCategories(DISH_CATEGORIES);
+}
+
+export async function getCuisineCategories() {
+  return (await loadTaxons("cuisine", "cuisines")) ?? cloneCategories(CUISINE_CATEGORIES);
+}
+
+/** Формат еды: фастфуд, стритфуд, кофейня и так далее. Ось «format» на бэкенде. */
+export async function getFormatCategories(): Promise<FoodCategory[]> {
+  const loaded = await loadTaxons("format", "formats");
+  if (loaded) return loaded;
+  return PLACE_CATEGORIES.map((c) => ({
+    id: c.id, label: c.label, emoji: c.emoji, mode: "formats" as const,
+  }));
+}
+
+/** Форма еды: супы, салаты, десерты, выпечка. Ось «form» на бэкенде. */
+export async function getFormCategories(): Promise<FoodCategory[]> {
+  return (await loadTaxons("form", "forms")) ?? [];
+}
+
+/** Дополнительные признаки: вегетарианское, постное, ПП. Ось «diet». */
+export async function getDietCategories(): Promise<FoodCategory[]> {
+  return (await loadTaxons("diet", "diets")) ?? [];
+}
+
+/**
+ * Популярные — просто первые из справочника: он отсортирован по названию,
+ * а осмысленной популярности у категорий пока нет.
+ */
+export async function getPopularDishCategories() {
+  const all = await getDishCategories();
+  return all.length > 14 ? all.slice(0, 14) : all;
+}
+
+export async function getPopularCuisineCategories() {
+  const all = await getCuisineCategories();
+  return all.length > 12 ? all.slice(0, 12) : all;
+}
 
 export function getPlaceCategories(): PlaceCategory[] {
   return PLACE_CATEGORIES.map((category) => ({ ...category }));

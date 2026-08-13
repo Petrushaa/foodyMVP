@@ -12,7 +12,9 @@ from .models import (
 
 @admin.register(Taxon)
 class TaxonAdmin(admin.ModelAdmin):
-    list_display = ('id', 'kind', 'name', 'slug')
+    list_display = ('emoji', 'name', 'kind', 'slug')
+    list_display_links = ('name',)
+    list_editable = ('emoji',)
     list_filter = ('kind',)
     search_fields = ('name', 'slug')
     prepopulated_fields = {'slug': ('name',)}
@@ -20,11 +22,23 @@ class TaxonAdmin(admin.ModelAdmin):
 
 @admin.register(DishType)
 class DishTypeAdmin(admin.ModelAdmin):
-    """Здесь задаются категории по умолчанию: бургер → американская кухня + фастфуд."""
+    """
+    Здесь задаются категории по умолчанию: бургер → американская кухня + фастфуд.
+    Иконку можно править прямо в списке — она уедет во фронт вместе со справочником.
+    """
 
-    list_display = ('id', 'name')
+    list_display = ('emoji', 'name', 'categories')
+    list_display_links = ('name',)
+    list_editable = ('emoji',)
     search_fields = ('name',)
     filter_horizontal = ('default_taxons',)
+
+    @admin.display(description='Категории по умолчанию')
+    def categories(self, obj):
+        return ' · '.join(t.name for t in obj.default_taxons.all()) or '—'
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).prefetch_related('default_taxons')
 
 
 @admin.register(Tag)

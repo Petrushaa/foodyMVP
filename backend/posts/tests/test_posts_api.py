@@ -199,10 +199,25 @@ class TestVisibility:
         assert response.status_code == 200
         assert response.data['count'] == 1
 
-    def test_author_sees_own_pending(self, auth_client, author, make_post):
+    def test_own_pending_is_not_in_common_feed(self, auth_client, author, make_post):
+        """Неодобренный пост не должен лезть в общую ленту даже своему автору."""
         make_post(author)
-        response = auth_client.get(POSTS_URL)
-        assert response.data['count'] == 1
+        assert auth_client.get(POSTS_URL).data['count'] == 0
+
+    def test_author_sees_own_pending_in_profile(self, auth_client, author, make_post):
+        make_post(author)
+        assert auth_client.get(f'{POSTS_URL}?author=me').data['count'] == 1
+
+    def test_staff_does_not_see_pending_in_common_feed(self, api_client, moderator, author,
+                                                       make_post):
+        """Сотруднику очередь показывает /moderation/, а не лента."""
+        make_post(author)
+        api_client.force_authenticate(moderator)
+        assert api_client.get(POSTS_URL).data['count'] == 0
+
+    def test_author_opens_own_pending_by_direct_link(self, auth_client, author, make_post):
+        post = make_post(author)
+        assert auth_client.get(f'{POSTS_URL}{post.id}/').status_code == 200
 
     def test_others_pending_posts_are_hidden(self, api_client, other_author, author, make_post):
         make_post(author)

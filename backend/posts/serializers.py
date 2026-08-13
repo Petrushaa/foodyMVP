@@ -53,7 +53,7 @@ class TagSerializer(serializers.ModelSerializer):
 class TaxonSerializer(serializers.ModelSerializer):
     class Meta:
         model = Taxon
-        fields = ['id', 'kind', 'name', 'slug']
+        fields = ['id', 'kind', 'name', 'slug', 'emoji']
 
 
 class DishTypeSerializer(serializers.ModelSerializer):
@@ -63,7 +63,7 @@ class DishTypeSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = DishType
-        fields = ['id', 'name', 'default_taxons']
+        fields = ['id', 'name', 'emoji', 'default_taxons']
 
 
 class RestaurantSerializer(serializers.ModelSerializer):

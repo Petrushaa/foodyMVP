@@ -40,9 +40,13 @@ class PostViewSet(viewsets.ModelViewSet):
 
     def get_queryset(self):
         """
-        Видны одобренные посты. Автору дополнительно видны свои — на модерации
-        и отклонённые. Мягко удалённые не видны никому: их отсекает менеджер
-        по умолчанию, поэтому здесь про них ничего писать не нужно.
+        В общей ленте — только одобренные посты, независимо от того, кто смотрит.
+
+        Свои посты на модерации и отклонённые автор видит **лишь у себя в профиле**
+        (то есть при явном фильтре по автору) и по прямой ссылке на пост. Иначе
+        неодобренное лезло бы в общую ленту — автору свои, а сотруднику вообще все.
+
+        Мягко удалённые не видны никому: их отсекает менеджер по умолчанию.
         """
         user = self.request.user
         queryset = Post.objects.select_related(
@@ -56,12 +60,23 @@ class PostViewSet(viewsets.ModelViewSet):
                 Prefetch('saves', queryset=PostSave.objects.filter(user=user),
                          to_attr='prefetched_saves'),
             )
-            if not user.is_staff:
-                queryset = queryset.filter(Q(status=Post.STATUS_APPROVED) | Q(user=user))
-        else:
-            queryset = queryset.filter(status=Post.STATUS_APPROVED)
 
-        return self._apply_feed(queryset)
+        return self._apply_feed(queryset.filter(self._visibility(user)))
+
+    def _visibility(self, user):
+        """Какие посты человек вправе увидеть в текущем запросе."""
+        visible = Q(status=Post.STATUS_APPROVED)
+        if not user.is_authenticated:
+            return visible
+
+        # По прямой ссылке автор открывает свой пост в любом статусе, чтобы
+        # увидеть причину отказа; сотрудник — любой, ему это нужно для разбора.
+        if self.action != 'list':
+            return Q() if user.is_staff else visible | Q(user=user)
+
+        author = self.request.query_params.get('author')
+        is_own_feed = author == 'me' or (author or '').isdigit() and int(author) == user.id
+        return visible | Q(user=user) if is_own_feed else visible
 
     def _apply_feed(self, queryset):
         """

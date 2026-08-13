@@ -24,7 +24,9 @@ import { CategoryModeToggle } from "@/components/categories/category-mode-toggle
 import {
   getCuisineCategories,
   getDishCategories,
-  getPlaceCategories,
+  getDietCategories,
+  getFormCategories,
+  getFormatCategories,
   getPopularCuisineCategories,
   getPopularDishCategories,
   matchCategoryByName,
@@ -38,20 +40,24 @@ import { cn } from "@/lib/utils";
 
 type CategorySelectionSource = "review" | "search";
 
-type CategoryTab = "dishes" | "cuisines" | "formats";
+type CategoryTab = "dishes" | "cuisines" | "formats" | "forms" | "diets";
 
-const MODE_ORDER: CategoryTab[] = ["dishes", "cuisines", "formats"];
+const MODE_ORDER: CategoryTab[] = ["dishes", "cuisines", "formats", "forms", "diets"];
 
 const CATEGORY_TABS: readonly { id: CategoryTab; label: string }[] = [
   { id: "dishes", label: "Блюда" },
   { id: "cuisines", label: "Кухни" },
   { id: "formats", label: "Формат" },
+  { id: "forms", label: "Форма" },
+  { id: "diets", label: "Особенности" },
 ];
 
 const ALL_SECTION_TITLE: Record<CategoryTab, string> = {
   dishes: "Все блюда",
   cuisines: "Все кухни",
   formats: "Все форматы",
+  forms: "Все формы",
+  diets: "Все особенности",
 };
 
 type CategorySelectionScreenProps = {
@@ -71,8 +77,10 @@ type CategoryData = {
   cuisines: FoodCategory[];
   popularDishes: FoodCategory[];
   popularCuisines: FoodCategory[];
-  // Форматы заведений (фастфуд, десерты, кофе…) — заглушка на фронте.
-  placeCategories: PlaceCategory[];
+  // Три оси справочника кроме кухни: формат еды, форма еды и доп. признаки.
+  formats: FoodCategory[];
+  forms: FoodCategory[];
+  diets: FoodCategory[];
 };
 
 type LoadState =
@@ -219,23 +227,20 @@ export function CategorySelectionScreen({
     setLoadState({ status: "loading", data: null, error: null });
 
     try {
-      const [dishes, cuisines, popularDishes, popularCuisines] =
+      const [dishes, cuisines, popularDishes, popularCuisines, formats, forms, diets] =
         await Promise.all([
           getDishCategories(),
           getCuisineCategories(),
           getPopularDishCategories(),
           getPopularCuisineCategories(),
+          getFormatCategories(),
+          getFormCategories(),
+          getDietCategories(),
         ]);
 
       setLoadState({
         status: "success",
-        data: {
-          dishes,
-          cuisines,
-          popularDishes,
-          popularCuisines,
-          placeCategories: getPlaceCategories(),
-        },
+        data: { dishes, cuisines, popularDishes, popularCuisines, formats, forms, diets },
         error: null,
       });
     } catch {
@@ -273,9 +278,13 @@ export function CategorySelectionScreen({
             })
           : await getDishCategories();
 
-        // Кухни — всегда из статического справочника (заглушка), даже если
-        // блюда пришли с бэка: справочника кухонь на беке пока нет.
-        const cuisines = await getCuisineCategories();
+        // Все оси справочника теперь на бэкенде, вместе с иконками.
+        const [cuisines, formats, forms, diets] = await Promise.all([
+          getCuisineCategories(),
+          getFormatCategories(),
+          getFormCategories(),
+          getDietCategories(),
+        ]);
         const popularDishes = useApi
           ? dishesFromApi.slice(0, 4)
           : await getPopularDishCategories();
@@ -290,7 +299,9 @@ export function CategorySelectionScreen({
             cuisines,
             popularDishes,
             popularCuisines,
-            placeCategories: getPlaceCategories(),
+            formats,
+            forms,
+            diets,
           },
           error: null,
         });
@@ -316,17 +327,16 @@ export function CategorySelectionScreen({
     if (loadState.status !== "success") return [];
     if (mode === "dishes") return loadState.data.dishes;
     if (mode === "cuisines") return loadState.data.cuisines;
-    // Форматы: PlaceCategory → FoodCategory (mode влияет только на размер подписи).
-    return loadState.data.placeCategories.map(
-      (category): FoodCategory => ({ ...category, mode: "dishes" })
-    );
+    if (mode === "forms") return loadState.data.forms;
+    if (mode === "diets") return loadState.data.diets;
+    return loadState.data.formats;
   }, [loadState, mode]);
 
   const currentPopularCategories = useMemo(() => {
     if (loadState.status !== "success") return [];
     if (mode === "dishes") return loadState.data.popularDishes;
     if (mode === "cuisines") return loadState.data.popularCuisines;
-    // У форматов «популярных» нет — секцию не показываем.
+    // У остальных осей записей немного — «популярных» среди них не выделяем.
     return [];
   }, [loadState, mode]);
 
