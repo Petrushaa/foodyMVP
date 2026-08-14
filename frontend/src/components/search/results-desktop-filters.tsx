@@ -9,9 +9,11 @@ import {
   PRICE_MAX,
   PRICE_MIN,
 } from "@/components/search/price-range-slider";
-import type {
-  CategoryChip,
-  CategoryGroups,
+import {
+  CATEGORY_PARAMS,
+  TAB_PARAM,
+  type CategoryChip,
+  type CategoryGroups,
 } from "@/components/search/results-category-control";
 import { cn } from "@/lib/utils";
 
@@ -45,7 +47,7 @@ export function ResultsDesktopFilters({ groups }: { groups: CategoryGroups }) {
 
   const currentFrom = toNum(searchParams.get("price_min"), PRICE_MIN);
   const currentTo = toNum(searchParams.get("price_max"), PRICE_MAX);
-  const currentQuery = (searchParams.get("q") ?? "").trim().toLowerCase();
+  const search = searchParams.toString();
 
   const pushParams = useCallback(
     (mutate: (p: URLSearchParams) => void) => {
@@ -80,30 +82,34 @@ export function ResultsDesktopFilters({ groups }: { groups: CategoryGroups }) {
     return () => window.clearTimeout(t);
   }, [price, currentFrom, currentTo, applyPrice]);
 
-  // Категория — стартовая вкладка по текущему q.
-  const matchedTab = useMemo(() => {
+  // Выбранная категория: по ней подсвечиваем чип и открываем нужную вкладку.
+  const matched = useMemo(() => {
+    const params = new URLSearchParams(search);
     for (const tab of TABS) {
-      if (groups[tab.id].some((c) => c.label.trim().toLowerCase() === currentQuery)) {
-        return tab.id;
-      }
+      const current = params.get(TAB_PARAM[tab.id]);
+      if (!current) continue;
+      const hit = groups[tab.id].find((c) => c.value === current);
+      if (hit) return { tab: tab.id, value: hit.value };
     }
     return null;
-  }, [currentQuery, groups]);
+  }, [groups, search]);
 
-  const [tab, setTab] = useState<Tab>(matchedTab ?? "dishes");
+  const [tab, setTab] = useState<Tab>(matched?.tab ?? "dishes");
   useEffect(() => {
-    if (matchedTab) setTab(matchedTab);
-  }, [matchedTab]);
+    if (matched) setTab(matched.tab);
+  }, [matched]);
 
   const pickCategory = useCallback(
     (chip: CategoryChip) => {
-      const isActive = chip.label.trim().toLowerCase() === currentQuery;
+      const isActive = matched?.value === chip.value;
       pushParams((p) => {
-        if (isActive) p.delete("q");
-        else p.set("q", chip.label);
+        // Категория одна: выбирая новую, снимаем прежнюю с любой оси.
+        for (const name of CATEGORY_PARAMS) p.delete(name);
+        p.delete("category_id"); // старый числовой параметр, если остался в адресе
+        if (!isActive) p.set(TAB_PARAM[tab], chip.value);
       });
     },
-    [currentQuery, pushParams]
+    [matched, pushParams, tab]
   );
 
   return (
@@ -129,7 +135,7 @@ export function ResultsDesktopFilters({ groups }: { groups: CategoryGroups }) {
         />
         <div className="mt-3 grid grid-cols-3 gap-x-2 gap-y-3">
           {groups[tab].map((chip) => {
-            const isActive = chip.label.trim().toLowerCase() === currentQuery;
+            const isActive = matched?.value === chip.value;
             return (
               <button
                 key={chip.id}
