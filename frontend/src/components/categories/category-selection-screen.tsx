@@ -35,7 +35,7 @@ import {
   type PlaceCategory,
 } from "@/lib/categories";
 import type { Palette } from "@/lib/mock-data";
-import { getSearchResultsHref } from "@/lib/search";
+import { TAB_PARAM } from "@/components/search/results-category-control";
 import { cn } from "@/lib/utils";
 
 type CategorySelectionSource = "review" | "search";
@@ -361,18 +361,12 @@ export function CategorySelectionScreen({
     }
 
     if (source === "search") {
-      // NR2: если есть данные из бэка — используем числовой category_id
-      if (apiCategories && apiCategories.length > 0) {
-        const apiCat = apiCategories.find(
-          (c) => c.name.toLowerCase() === category.label.toLowerCase()
-        );
-        if (apiCat) {
-          router.push(`/search/results?category_id=${apiCat.id}`);
-          return;
-        }
-      }
-      // Fallback: текстовый поиск по label если бэк не отдал категорию
-      router.push(getSearchResultsHref(category.label));
+      // Настоящий фильтр, а не поиск по названию: у категории уже есть то, что
+      // ждёт бэкенд — слаг для осей каталога и название для типа блюда.
+      const params = new URLSearchParams({
+        [TAB_PARAM[category.mode]]: category.id,
+      });
+      router.push(`/search/results?${params.toString()}`);
       return;
     }
 

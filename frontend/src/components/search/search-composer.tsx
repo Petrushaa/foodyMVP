@@ -13,9 +13,10 @@ import {
   saveRecentQueries,
   useRecentSearchQueries,
 } from "@/components/search/recent-search-store";
-import type {
-  CategoryChip,
-  CategoryGroups,
+import {
+  TAB_PARAM,
+  type CategoryChip,
+  type CategoryGroups,
 } from "@/components/search/results-category-control";
 import { cn } from "@/lib/utils";
 
@@ -82,10 +83,15 @@ export function SearchComposer({
 
   const goToCategory = useCallback(
     (chip: CategoryChip) => {
-      // Категория пока — текстовый запрос q (заглушка).
-      router.push(`/search/results?q=${encodeURIComponent(chip.label)}`);
+      // Категория — настоящий фильтр, а не текст в строке поиска: иначе
+      // «Японская» искалась бы как слово в названиях, и роллы не находились.
+      // Набранный запрос сохраняем — фильтр и текст должны работать вместе.
+      const params = new URLSearchParams({ [TAB_PARAM[tab]]: chip.value });
+      const q = query.trim();
+      if (q) params.set("q", q);
+      router.push(`/search/results?${params.toString()}`);
     },
-    [router]
+    [query, router, tab]
   );
 
   function leaveSearch() {

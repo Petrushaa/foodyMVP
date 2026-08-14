@@ -25,7 +25,7 @@ export type CategoryGroups = {
   diets: CategoryChip[];
 };
 
-type Tab = "dishes" | "cuisines" | "formats" | "forms" | "diets";
+export type Tab = "dishes" | "cuisines" | "formats" | "forms" | "diets";
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: "dishes", label: "Блюда" },
@@ -37,14 +37,14 @@ const TABS: readonly { id: Tab; label: string }[] = [
 
 // Каким параметром фильтруется вкладка. Оси каталога бэкенд уже принимает
 // слагами (?cuisine=japanese), «Блюда» — это тип блюда по названию.
-const TAB_PARAM: Record<Tab, string> = {
+export const TAB_PARAM: Record<Tab, string> = {
   dishes: "dish_type",
   cuisines: "cuisine",
   formats: "format",
   forms: "form",
   diets: "diet",
 };
-const CATEGORY_PARAMS = Object.values(TAB_PARAM);
+export const CATEGORY_PARAMS = Object.values(TAB_PARAM);
 
 /**
  * Кнопка «Категория» на странице результатов. Открывает шторку с разделами
