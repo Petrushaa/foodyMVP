@@ -223,7 +223,14 @@ class Taxon(models.Model):
     slug = models.SlugField(max_length=100, verbose_name='Код')
     # Иконка для интерфейса. Хранится здесь, а не в коде фронта: справочник
     # ведут админы, и добавляя категорию, они же выбирают ей значок.
-    emoji = models.CharField(max_length=8, blank=True, verbose_name='Иконка')
+    #
+    # Картинка старше эмодзи: если она загружена — показывается она, иначе
+    # значок. Так набор иконок можно заливать постепенно, не оставляя пустых
+    # мест в интерфейсе.
+    emoji = models.CharField(max_length=8, blank=True, verbose_name='Значок')
+    icon = models.ImageField(
+        upload_to='catalog_icons/taxons/', blank=True, verbose_name='Иконка',
+    )
 
     class Meta:
         verbose_name = 'Категория'
@@ -246,7 +253,11 @@ class DishType(models.Model):
     """
 
     name = models.CharField(max_length=100, unique=True, db_index=True, verbose_name='Название блюда')
-    emoji = models.CharField(max_length=8, blank=True, verbose_name='Иконка')
+    # Картинка старше эмодзи — см. Taxon.icon.
+    emoji = models.CharField(max_length=8, blank=True, verbose_name='Значок')
+    icon = models.ImageField(
+        upload_to='catalog_icons/dish-types/', blank=True, verbose_name='Иконка',
+    )
     default_taxons = models.ManyToManyField(
         Taxon, blank=True, related_name='dish_types', verbose_name='Категории по умолчанию'
     )

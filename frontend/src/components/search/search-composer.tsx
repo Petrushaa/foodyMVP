@@ -19,6 +19,7 @@ import {
   type CategoryGroups,
 } from "@/components/search/results-category-control";
 import { cn } from "@/lib/utils";
+import { CategoryIcon } from "@/components/categories/category-icon";
 
 const PRESS_CLASSES =
   "origin-center transition-transform duration-150 ease-out active:scale-[0.94] [-webkit-tap-highlight-color:transparent]";
@@ -182,7 +183,7 @@ export function SearchComposer({
               )}
             >
               <span className="grid aspect-square w-full place-items-center rounded-[18px] bg-white text-[24px] shadow-[0_6px_16px_rgba(20,40,28,0.07),inset_0_0_0_1.5px_#2ECC71] max-[380px]:text-[22px]">
-                <span aria-hidden="true">{chip.emoji}</span>
+                <CategoryIcon icon={chip.icon} emoji={chip.emoji} size={30} />
               </span>
               <span className="line-clamp-2 w-full text-center text-[10.5px] leading-[1.15] font-bold text-[#15291C] [overflow-wrap:anywhere] max-[380px]:text-[10px]">
                 {chip.label}

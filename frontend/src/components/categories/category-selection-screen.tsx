@@ -37,6 +37,7 @@ import {
 import type { Palette } from "@/lib/mock-data";
 import { TAB_PARAM } from "@/components/search/results-category-control";
 import { cn } from "@/lib/utils";
+import { CategoryIcon } from "@/components/categories/category-icon";
 
 type CategorySelectionSource = "review" | "search";
 
@@ -175,7 +176,7 @@ function PopularCategoryGrid({
           <span
             className="grid aspect-square w-full place-items-center rounded-[22px] bg-white text-[30px] shadow-[0_8px_20px_rgba(20,40,28,0.08),inset_0_0_0_1.5px_#2ECC71] transition-transform duration-200 group-hover:-translate-y-0.5 max-[380px]:text-[26px]"
           >
-            <span aria-hidden="true">{category.emoji}</span>
+            <CategoryIcon icon={category.icon} emoji={category.emoji} size={30} />
           </span>
           <span
             className={cn(

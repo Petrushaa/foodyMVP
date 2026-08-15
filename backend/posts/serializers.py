@@ -50,20 +50,35 @@ class TagSerializer(serializers.ModelSerializer):
         fields = ['id', 'name']
 
 
-class TaxonSerializer(serializers.ModelSerializer):
+class IconMixin:
+    """
+    Отдаёт относительный URL иконки — или пусто, если её не загрузили.
+
+    Путь именно относительный, как у аватаров и фото постов: хост подставляет
+    фронт, и одна и та же выдача годится и локально, и на проде.
+    """
+
+    def get_icon(self, obj):
+        return obj.icon.url if obj.icon else None
+
+
+class TaxonSerializer(IconMixin, serializers.ModelSerializer):
+    icon = serializers.SerializerMethodField()
+
     class Meta:
         model = Taxon
-        fields = ['id', 'kind', 'name', 'slug', 'emoji']
+        fields = ['id', 'kind', 'name', 'slug', 'emoji', 'icon']
 
 
-class DishTypeSerializer(serializers.ModelSerializer):
+class DishTypeSerializer(IconMixin, serializers.ModelSerializer):
     """Тип блюда вместе с категориями по умолчанию — фронт подставляет их в форму."""
 
     default_taxons = TaxonSerializer(many=True, read_only=True)
+    icon = serializers.SerializerMethodField()
 
     class Meta:
         model = DishType
-        fields = ['id', 'name', 'emoji', 'default_taxons']
+        fields = ['id', 'name', 'emoji', 'icon', 'default_taxons']
 
 
 class RestaurantSerializer(serializers.ModelSerializer):

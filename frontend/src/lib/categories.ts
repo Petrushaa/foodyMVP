@@ -1,4 +1,4 @@
-import { apiRequest } from "@/lib/api";
+import { apiRequest, fixMediaUrl } from "@/lib/api";
 
 export type CategoryMode = "dishes" | "cuisines" | "formats" | "forms" | "diets";
 
@@ -6,6 +6,8 @@ export type FoodCategory = {
   id: string;
   label: string;
   emoji: string;
+  /** URL картинки из справочника. Пусто — рисуется эмодзи. */
+  icon?: string;
   mode: CategoryMode;
 };
 
@@ -108,8 +110,15 @@ const PLACE_CATEGORIES: PlaceCategory[] = [
  * экран не должен оказаться пустым.
  */
 
-type ApiDishType = { id: number; name: string; emoji?: string };
-type ApiTaxon = { id: number; kind: string; name: string; slug: string; emoji?: string };
+type ApiDishType = { id: number; name: string; emoji?: string; icon?: string | null };
+type ApiTaxon = {
+  id: number;
+  kind: string;
+  name: string;
+  slug: string;
+  emoji?: string;
+  icon?: string | null;
+};
 
 async function loadDishTypes(): Promise<FoodCategory[] | null> {
   try {
@@ -122,6 +131,7 @@ async function loadDishTypes(): Promise<FoodCategory[] | null> {
       id: item.name,
       label: item.name,
       emoji: item.emoji || "🍽️",
+      icon: fixMediaUrl(item.icon) || undefined,
       mode: "dishes" as const,
     }));
   } catch {
@@ -138,6 +148,7 @@ async function loadTaxons(kind: string, mode: CategoryMode): Promise<FoodCategor
       id: item.slug,
       label: item.name,
       emoji: item.emoji || "🍽️",
+      icon: fixMediaUrl(item.icon) || undefined,
       mode,
     }));
   } catch {

@@ -29,11 +29,11 @@ export default async function SearchPage() {
     getDietCategories(),
   ]);
   const categoryGroups: CategoryGroups = {
-    dishes: dishes.map((c) => ({ id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
-    cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
-    formats: formats.map((c) => ({ id: `fmt-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
-    forms: forms.map((c) => ({ id: `frm-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
-    diets: diets.map((c) => ({ id: `diet-${c.id}`, value: c.id, label: c.label, emoji: c.emoji })),
+    dishes: dishes.map((c) => ({ id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
+    cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
+    formats: formats.map((c) => ({ id: `fmt-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
+    forms: forms.map((c) => ({ id: `frm-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
+    diets: diets.map((c) => ({ id: `diet-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
   };
 
   return (
