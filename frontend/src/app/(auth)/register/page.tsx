@@ -65,14 +65,14 @@ export default function RegisterPage() {
           </p>
         </header>
 
-        <GlassSurface className="flex-1 rounded-[26px] border border-white/65 bg-white/45 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
+        <div className="flex flex-1 flex-col">
           <form
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
               handleSubmit(new FormData(e.currentTarget));
             }}
-            className="flex h-full flex-col gap-3 px-5 pt-7 pb-5"
+            className="flex h-full flex-col gap-3 pt-1 pb-5"
           >
             <GlassSurface className={FIELD_SURFACE}>
               <User className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-5 text-[#8A958E] z-10" />
@@ -159,7 +159,7 @@ export default function RegisterPage() {
               Продолжая, вы соглашаетесь с политикой конфиденциальности Foody
             </p>
           </form>
-        </GlassSurface>
+        </div>
       </div>
     </main>
   );
