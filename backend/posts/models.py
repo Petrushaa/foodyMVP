@@ -231,11 +231,17 @@ class Taxon(models.Model):
     icon = models.ImageField(
         upload_to='catalog_icons/taxons/', blank=True, verbose_name='Иконка',
     )
+    # Порядок в интерфейсе. Пусто — «не задан»: такие уезжают в конец и там
+    # стоят по алфавиту. Так курировать нужно только верхушку списка (пицца,
+    # бургеры, суши), а остальные 100+ записей не трогать вовсе.
+    sort_order = models.PositiveIntegerField(
+        null=True, blank=True, db_index=True, verbose_name='Порядок',
+    )
 
     class Meta:
         verbose_name = 'Категория'
         verbose_name_plural = 'Категории'
-        ordering = ['kind', 'name']
+        ordering = ['kind', models.F('sort_order').asc(nulls_last=True), 'name']
         constraints = [
             models.UniqueConstraint(fields=['kind', 'slug'], name='taxon_unique_kind_slug'),
             models.UniqueConstraint(fields=['kind', 'name'], name='taxon_unique_kind_name'),
@@ -258,6 +264,12 @@ class DishType(models.Model):
     icon = models.ImageField(
         upload_to='catalog_icons/dish-types/', blank=True, verbose_name='Иконка',
     )
+    # Порядок в интерфейсе. Пусто — «не задан»: такие уезжают в конец и там
+    # стоят по алфавиту. Так курировать нужно только верхушку списка (пицца,
+    # бургеры, суши), а остальные 100+ записей не трогать вовсе.
+    sort_order = models.PositiveIntegerField(
+        null=True, blank=True, db_index=True, verbose_name='Порядок',
+    )
     default_taxons = models.ManyToManyField(
         Taxon, blank=True, related_name='dish_types', verbose_name='Категории по умолчанию'
     )
@@ -265,7 +277,7 @@ class DishType(models.Model):
     class Meta:
         verbose_name = 'Тип блюда'
         verbose_name_plural = 'Типы блюд'
-        ordering = ['name']
+        ordering = [models.F('sort_order').asc(nulls_last=True), 'name']
 
     def __str__(self):
         return self.name

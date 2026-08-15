@@ -49,27 +49,38 @@ class IconPreviewMixin:
 
 @admin.register(Taxon)
 class TaxonAdmin(IconPreviewMixin, admin.ModelAdmin):
-    list_display = ('icon_preview', 'emoji', 'name', 'kind', 'slug')
+    """
+    Порядок и значок правятся прямо в списке: заходить в каждую из 58 записей
+    ради одного числа — то ещё удовольствие. Пустой порядок значит «в конец
+    по алфавиту», так что заполнять нужно только верхушку.
+    """
+
+    list_display = ('icon_preview', 'emoji', 'name', 'kind', 'slug', 'sort_order')
     list_display_links = ('name',)
-    list_editable = ('emoji',)
+    list_editable = ('emoji', 'sort_order')
     list_filter = ('kind', HasIconFilter)
     search_fields = ('name', 'slug')
     prepopulated_fields = {'slug': ('name',)}
+    list_per_page = 100
 
 
 @admin.register(DishType)
 class DishTypeAdmin(IconPreviewMixin, admin.ModelAdmin):
     """
     Здесь задаются категории по умолчанию: бургер → американская кухня + фастфуд.
-    Иконку можно править прямо в списке — она уедет во фронт вместе со справочником.
+    Значок и порядок правятся прямо в списке — они уедут во фронт вместе со
+    справочником. Пустой порядок значит «в конец по алфавиту»: чтобы поднять
+    пиццу и бургеры наверх, достаточно проставить 1 и 2, остальные 120 записей
+    трогать не нужно.
     """
 
-    list_display = ('icon_preview', 'emoji', 'name', 'categories')
+    list_display = ('icon_preview', 'emoji', 'name', 'sort_order', 'categories')
     list_display_links = ('name',)
-    list_editable = ('emoji',)
+    list_editable = ('emoji', 'sort_order')
     list_filter = (HasIconFilter,)
     search_fields = ('name',)
     filter_horizontal = ('default_taxons',)
+    list_per_page = 150
 
     @admin.display(description='Категории по умолчанию')
     def categories(self, obj):
