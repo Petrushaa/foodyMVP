@@ -516,3 +516,28 @@ class TestCommentThreads:
 
         published.refresh_from_db()
         assert published.statistics.comments_count == 2
+
+
+@pytest.mark.django_db
+class TestBulkSoftDeleteKeepsCounters:
+    """
+    Счётчики держатся на сигналах, а массовый `update()` их не шлёт. Один раз
+    это уже стоило поста с «5 комментариев», под которым не было ни одного.
+    """
+
+    def test_bulk_delete_of_comments_updates_post_counter(self, author, moderator,
+                                                          make_post):
+        from posts.models import Comment
+
+        post = approve_post(make_post(author), moderator)
+        Comment.objects.create(post=post, user=author, text='раз')
+        Comment.objects.create(post=post, user=author, text='два')
+        post.refresh_from_db()
+        assert post.statistics.comments_count == 2
+
+        Comment.objects.filter(post=post).delete()
+
+        post.refresh_from_db()
+        assert post.statistics.comments_count == 0, 'счётчик обязан пойти за выдачей'
+        assert Comment.objects.filter(post=post).count() == 0
+        assert Comment.all_objects.filter(post=post).count() == 2, 'удаление мягкое'

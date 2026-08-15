@@ -278,6 +278,9 @@ export function CommentsSheet({
     () => new Set()
   );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  // Комментарии, чьё серверное состояние лайка уже учтено. Держим в ref, а не
+  // в состоянии: это память между открытиями шторки, перерисовывать нечего.
+  const seededCommentIdsRef = useRef<Set<string>>(new Set());
   const shouldAnimate = canAnimate(shouldReduceMotion);
   const visibleComments = useMemo(
     () =>
@@ -318,15 +321,31 @@ export function CommentsSheet({
       return;
     }
 
-    // Отдельный запрос за лайками не нужен: список комментариев уже приходит
+    // Отдельный запрос за лайками не нужен: комментарии и ответы приходят
     // с `liked` — бэк проставляет его для текущего пользователя.
-    setLikedCommentIds(
-      visibleComments
-        .filter((comment) => comment.liked)
-        .map((comment) => getCommentIdKey(comment.id))
-    );
+    //
+    // Засеваем каждый комментарий ровно один раз. Иначе при повторном открытии
+    // шторки состояние перетиралось бы снимком, снятым до лайка, и лайк на
+    // ответе пропадал: в списке лежит старое `liked: false`.
+    const seen = seededCommentIdsRef.current;
+    const freshlyLiked: string[] = [];
+    for (const comment of [
+      ...visibleComments,
+      ...Object.values(repliesByParent).flat(),
+    ]) {
+      const key = getCommentIdKey(comment.id);
+      if (seen.has(key)) continue;
+      seen.add(key);
+      if (comment.liked) freshlyLiked.push(key);
+    }
+
+    if (freshlyLiked.length > 0) {
+      setLikedCommentIds((current) =>
+        Array.from(new Set([...current, ...freshlyLiked]))
+      );
+    }
     setCommentLikesLoaded(true);
-  }, [open, visibleComments]);
+  }, [open, visibleComments, repliesByParent]);
 
   const onOpenRef = useRef(onOpen);
   onOpenRef.current = onOpen;

@@ -120,8 +120,19 @@ class SoftDeleteQuerySet(models.QuerySet):
         return self.filter(deleted_at__isnull=False)
 
     def delete(self):
-        """Массовое удаление тоже мягкое."""
-        return self.update(deleted_at=timezone.now())
+        """
+        Массовое удаление тоже мягкое — и по одной записи, а не одним `update()`.
+
+        `update()` не шлёт сигналы, а на них держатся все денормализованные
+        счётчики: комментарии пропадали из выдачи, а «5 комментариев» под постом
+        оставалось. Записей за раз тут единицы (модератор чистит ветку), так что
+        цена в лишние запросы куда меньше цены разъехавшихся счётчиков.
+        """
+        count = 0
+        for instance in self:
+            instance.delete()
+            count += 1
+        return count, {}
 
 
 class SoftDeleteManager(models.Manager.from_queryset(SoftDeleteQuerySet)):
