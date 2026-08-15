@@ -884,6 +884,13 @@ class Comment(SoftDeleteModel):
         related_name='comments', verbose_name='Автор'
     )
     text = models.TextField(verbose_name='Текст комментария')
+    # Ветка ответов ровно одного уровня, как в ютубе: ответ на ответ
+    # прикрепляется к тому же корневому комментарию, а не уезжает вглубь.
+    # Иначе на узком экране третий уровень уже некуда сдвигать.
+    parent = models.ForeignKey(
+        'self', on_delete=models.CASCADE, null=True, blank=True,
+        related_name='replies', verbose_name='Ответ на комментарий',
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='Время публикации')
 
     class Meta:
@@ -893,11 +900,19 @@ class Comment(SoftDeleteModel):
         ordering = ['created_at']
         indexes = [
             models.Index(fields=['-created_at']),
+            # Ветка комментария: список ответов запрашивается отдельно.
+            models.Index(fields=['parent', 'created_at']),
         ]
 
     def __str__(self):
         author = self.user.username if self.user else 'аноним'
         return f'Комментарий {self.pk} от {author}'
+
+    def save(self, *args, **kwargs):
+        # Уровень всегда один: отвечая на ответ, попадаем в ту же ветку.
+        if self.parent_id and self.parent.parent_id:
+            self.parent = self.parent.parent
+        super().save(*args, **kwargs)
 
 
 class CommentLike(models.Model):

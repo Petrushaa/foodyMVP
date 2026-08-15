@@ -17,6 +17,7 @@ import { createPortal } from "react-dom";
 
 import { UserAvatar } from "@/components/feed/user-avatar";
 import { toggleCommentLike } from "@/lib/feed-client";
+import { fetchCommentReplies } from "@/lib/comments-api";
 import type { PostComment } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import { createComment, deleteComment } from "@/app/actions/post";
@@ -266,6 +267,16 @@ export function CommentsSheet({
   );
   const [submitNotice, setSubmitNotice] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Ветки ответов: подгружаются по требованию и держатся отдельно от корневых.
+  const [repliesByParent, setRepliesByParent] = useState<
+    Record<string, PostComment[]>
+  >({});
+  const [expandedParents, setExpandedParents] = useState<Set<string>>(
+    () => new Set()
+  );
+  const [loadingParents, setLoadingParents] = useState<Set<string>>(
+    () => new Set()
+  );
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const shouldAnimate = canAnimate(shouldReduceMotion);
   const visibleComments = useMemo(
@@ -398,6 +409,39 @@ export function CommentsSheet({
   function handleReply(comment: PostComment) {
     setReplyTarget(comment);
     textareaRef.current?.focus();
+  }
+
+  /** Корень ветки: отвечая на ответ, остаёмся в той же ветке — как на бэкенде. */
+  function branchIdOf(comment: PostComment) {
+    return comment.parentId ?? comment.id;
+  }
+
+  async function toggleReplies(comment: PostComment) {
+    const key = getCommentIdKey(comment.id);
+
+    if (expandedParents.has(key)) {
+      setExpandedParents((current) => {
+        const next = new Set(current);
+        next.delete(key);
+        return next;
+      });
+      return;
+    }
+
+    setExpandedParents((current) => new Set(current).add(key));
+
+    // Уже загруженное не перезапрашиваем: в ветке могут лежать наши
+    // только что отправленные ответы, и перезагрузка бы их стёрла.
+    if (repliesByParent[key]) return;
+
+    setLoadingParents((current) => new Set(current).add(key));
+    const loaded = await fetchCommentReplies(comment.id);
+    setRepliesByParent((current) => ({ ...current, [key]: loaded }));
+    setLoadingParents((current) => {
+      const next = new Set(current);
+      next.delete(key);
+      return next;
+    });
   }
 
   async function handleLikeToggle(comment: PostComment, nextLiked: boolean) {
@@ -543,63 +587,94 @@ export function CommentsSheet({
     }
 
     const currentReplyTarget = replyTarget;
+    // Ответ всегда крепится к корню ветки: отвечая на ответ, попадаем туда же.
+    const branchId = currentReplyTarget ? branchIdOf(currentReplyTarget) : null;
+    const branchKey = branchId != null ? getCommentIdKey(branchId) : null;
     const nextComment = createOptimisticComment(
       {
         text,
-        replyToCommentId: currentReplyTarget?.id,
+        replyToCommentId: branchId ?? undefined,
         replyToUser: currentReplyTarget?.user,
       },
       CURRENT_USER
     );
+    if (branchId != null) nextComment.parentId = branchId;
 
-    // Optimistic: append immediately and clear input
-    setSubmittedComments((currentComments) => [...currentComments, nextComment]);
+    // Optimistic: показываем сразу и очищаем ввод.
+    if (branchKey) {
+      setRepliesByParent((current) => ({
+        ...current,
+        [branchKey]: [...(current[branchKey] ?? []), nextComment],
+      }));
+      // Свой ответ должен быть виден — раскрываем ветку.
+      setExpandedParents((current) => new Set(current).add(branchKey));
+    } else {
+      setSubmittedComments((currentComments) => [...currentComments, nextComment]);
+    }
     setDraft("");
     setReplyTarget(null);
     setSubmitNotice(null);
     setIsSubmitting(true);
 
     try {
-      // For replies prepend a mention so backend stores it as plain text reply.
-      const payloadText = currentReplyTarget
-        ? `${getDisplayHandle(currentReplyTarget.user)} ${text}`
-        : text;
-      const result: any = await createComment(String(postId), payloadText);
+      // Упоминание в текст больше не подставляем: ответ связан с родителем
+      // полем, а «кому отвечают» бэкенд отдаёт отдельно.
+      const result: any = await createComment(String(postId), text, branchId);
 
       if (result?.error) {
-        // Revert optimistic add + restore draft so user can retry
-        setSubmittedComments((currentComments) =>
-          currentComments.filter((c) => c.clientId !== nextComment.clientId)
-        );
+        dropOptimistic(nextComment.clientId, branchKey);
         setDraft(text);
         setReplyTarget(currentReplyTarget);
         setSubmitNotice(result.error || "Не удалось отправить комментарий");
       } else if (result?.data) {
-        // Replace optimistic comment with the persisted one (real id)
-        const persisted = result.data;
-        setSubmittedComments((currentComments) =>
-          currentComments.map((c) =>
-            c.clientId === nextComment.clientId
-              ? {
-                  ...c,
-                  id: persisted.id ?? c.id,
-                  clientId: undefined,
-                  status: undefined,
-                }
-              : c
-          )
-        );
+        promoteOptimistic(nextComment.clientId, result.data, branchKey);
       }
     } catch (error: any) {
-      setSubmittedComments((currentComments) =>
-        currentComments.filter((c) => c.clientId !== nextComment.clientId)
-      );
+      dropOptimistic(nextComment.clientId, branchKey);
       setDraft(text);
       setReplyTarget(currentReplyTarget);
       setSubmitNotice(error?.message || "Не удалось отправить комментарий");
     } finally {
       setIsSubmitting(false);
     }
+  }
+
+  /** Убирает неудавшуюся оптимистичную запись оттуда, куда её положили. */
+  function dropOptimistic(clientId: string | undefined, branchKey: string | null) {
+    const without = (list: PostComment[]) =>
+      list.filter((c) => c.clientId !== clientId);
+
+    if (branchKey) {
+      setRepliesByParent((current) => ({
+        ...current,
+        [branchKey]: without(current[branchKey] ?? []),
+      }));
+      return;
+    }
+    setSubmittedComments(without);
+  }
+
+  /** Подменяет оптимистичную запись сохранённой — с настоящим id. */
+  function promoteOptimistic(
+    clientId: string | undefined,
+    persisted: any,
+    branchKey: string | null,
+  ) {
+    const replace = (list: PostComment[]) =>
+      list.map((c) =>
+        c.clientId === clientId
+          ? { ...c, id: persisted.id ?? c.id, clientId: undefined, status: undefined }
+          : c
+      );
+
+    if (branchKey) {
+      setRepliesByParent((current) => ({
+        ...current,
+        [branchKey]: replace(current[branchKey] ?? []),
+      }));
+      return;
+    }
+    setSubmittedComments(replace);
   }
 
   function handleDraftKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
@@ -668,29 +743,71 @@ export function CommentsSheet({
 
             <div className="hide-scroll min-h-0 flex-1 overflow-y-auto overscroll-contain px-7 py-6 max-[430px]:px-5">
               <div className="space-y-7">
-                {visibleComments.map((comment) => (
-                  <CommentRow
-                    key={comment.id}
-                    brand={brand}
-                    comment={comment}
-                    currentUserId={currentUserId}
-                    currentUsername={currentUsername}
-                    liked={
-                      comment.clientId
-                        ? localLikedCommentIdsSet.has(getCommentIdKey(comment.id))
-                        : commentLikesLoaded
-                          ? likedCommentIdsSet.has(getCommentIdKey(comment.id))
-                          : Boolean(comment.liked)
-                    }
-                    likePending={pendingLikedCommentIds.has(
-                      getCommentIdKey(comment.id)
-                    )}
-                    onDelete={handleDelete}
-                    onLikeToggle={handleLikeToggle}
-                    onReply={handleReply}
-                    shouldReduceMotion={shouldReduceMotion}
-                  />
-                ))}
+                {visibleComments.map((comment) => {
+                  const key = getCommentIdKey(comment.id);
+                  const branch = repliesByParent[key] ?? [];
+                  // Пока ветку не открывали, счёт берём с сервера; после —
+                  // из загруженного, чтобы свой свежий ответ сразу учитывался.
+                  const repliesCount = repliesByParent[key]
+                    ? branch.length
+                    : comment.repliesCount ?? 0;
+                  const isExpanded = expandedParents.has(key);
+                  const isLoading = loadingParents.has(key);
+
+                  const rowProps = (c: PostComment) => ({
+                    brand,
+                    comment: c,
+                    currentUserId,
+                    currentUsername,
+                    liked: c.clientId
+                      ? localLikedCommentIdsSet.has(getCommentIdKey(c.id))
+                      : commentLikesLoaded
+                        ? likedCommentIdsSet.has(getCommentIdKey(c.id))
+                        : Boolean(c.liked),
+                    likePending: pendingLikedCommentIds.has(getCommentIdKey(c.id)),
+                    onDelete: handleDelete,
+                    onLikeToggle: handleLikeToggle,
+                    onReply: handleReply,
+                    shouldReduceMotion,
+                  });
+
+                  return (
+                    <div key={comment.id} className="space-y-4">
+                      <CommentRow {...rowProps(comment)} />
+
+                      {repliesCount > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => toggleReplies(comment)}
+                          className="ml-[3.25rem] flex cursor-pointer items-center gap-1.5 border-0 bg-transparent p-0 text-[12.5px] font-extrabold text-[#65707A] outline-none transition-colors hover:text-[#15291C] max-[430px]:ml-11"
+                        >
+                          <span className="h-px w-6 bg-[#C9D0D6]" />
+                          {isExpanded
+                            ? "Скрыть ответы"
+                            : `Ответы (${repliesCount})`}
+                        </button>
+                      )}
+
+                      {isExpanded && (
+                        <div className="space-y-6">
+                          {isLoading && branch.length === 0 ? (
+                            <p className="ml-[3.25rem] text-[13px] font-medium text-[#99A1AB] max-[430px]:ml-11">
+                              Загружаем…
+                            </p>
+                          ) : (
+                            branch
+                              .filter(
+                                (r) => !deletedCommentKeys.has(getCommentIdKey(r.id))
+                              )
+                              .map((reply) => (
+                                <CommentRow key={reply.id} {...rowProps(reply)} />
+                              ))
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

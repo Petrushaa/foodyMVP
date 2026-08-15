@@ -444,3 +444,75 @@ class TestCityFeed:
 
         api_client.force_authenticate(author)  # Москва
         assert api_client.get(f'{POSTS_URL}?feed=subscriptions').data['count'] == 0
+
+
+@pytest.mark.django_db
+class TestCommentThreads:
+    """
+    Ответы живут веткой под комментарием, как в ютубе: список поста отдаёт
+    только корневые, ответы запрашиваются отдельно.
+    """
+
+    URL = '/api/v1/comments/'
+
+    def _comment(self, client, post, text='вкусно', parent=None):
+        payload = {'post': post.id, 'text': text}
+        if parent is not None:
+            payload['parent'] = parent
+        return client.post(self.URL, payload)
+
+    @pytest.fixture
+    def published(self, author, moderator, make_post):
+        return approve_post(make_post(author), moderator)
+
+    def test_reply_is_not_in_post_list(self, auth_client, published):
+        root = self._comment(auth_client, published).data
+        self._comment(auth_client, published, 'согласен', parent=root['id'])
+
+        response = auth_client.get(f'{self.URL}?post={published.id}')
+
+        assert response.data['count'] == 1, 'ответ не должен лежать в общем списке'
+        assert response.data['results'][0]['replies_count'] == 1
+
+    def test_replies_are_fetched_by_parent(self, auth_client, published):
+        root = self._comment(auth_client, published).data
+        self._comment(auth_client, published, 'согласен', parent=root['id'])
+        self._comment(auth_client, published, 'и я', parent=root['id'])
+
+        response = auth_client.get(f'{self.URL}?parent={root["id"]}')
+
+        assert response.data['count'] == 2
+        assert [c['text'] for c in response.data['results']] == ['согласен', 'и я']
+
+    def test_reply_to_a_reply_stays_in_the_same_branch(self, auth_client, published):
+        """Ветка одноуровневая: третьего отступа на узком экране просто нет."""
+        root = self._comment(auth_client, published).data
+        reply = self._comment(auth_client, published, 'согласен', parent=root['id']).data
+
+        deep = self._comment(auth_client, published, 'тоже', parent=reply['id'])
+
+        assert deep.data['parent'] == root['id']
+
+    def test_reply_carries_whom_it_answers(self, auth_client, published, author):
+        root = self._comment(auth_client, published).data
+        reply = self._comment(auth_client, published, 'согласен', parent=root['id'])
+
+        assert reply.data['reply_to'] == author.username
+
+    def test_reply_to_comment_of_another_post(self, auth_client, published, author,
+                                              moderator, make_post):
+        other = approve_post(make_post(author, item='Борщ', restaurant_name='Столовая',
+                                       address='Мира 3'), moderator)
+        root = self._comment(auth_client, other).data
+
+        response = self._comment(auth_client, published, 'мимо', parent=root['id'])
+
+        assert response.status_code == 400
+
+    def test_replies_count_post_comments(self, auth_client, published):
+        """Счётчик у поста считает и ответы — как в ленте показано «N комментариев»."""
+        root = self._comment(auth_client, published).data
+        self._comment(auth_client, published, 'согласен', parent=root['id'])
+
+        published.refresh_from_db()
+        assert published.statistics.comments_count == 2

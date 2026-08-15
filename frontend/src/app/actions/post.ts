@@ -123,7 +123,11 @@ export async function deletePost(postId: string) {
     }
 }
 
-export async function createComment(postId: string, text: string) {
+export async function createComment(
+    postId: string,
+    text: string,
+    parentId?: number | string | null,
+) {
     const session = await auth() as any;
     if (!session?.user?.accessToken) {
         return { error: "Unauthorized" };
@@ -131,13 +135,19 @@ export async function createComment(postId: string, text: string) {
 
     try {
         // Комментарии лежат отдельным ресурсом, пост передаётся полем.
+        // `parent` делает комментарий ответом: он уходит в ветку, а не в общий
+        // список. Бэкенд сам держит ветку одноуровневой.
         const response = await apiRequest(`/comments/`, {
             method: "POST",
             headers: {
                 "Authorization": `Bearer ${session.user.accessToken}`,
                 "Content-Type": "application/json"
             },
-            body: JSON.stringify({ post: Number(postId), text })
+            body: JSON.stringify({
+                post: Number(postId),
+                text,
+                ...(parentId ? { parent: Number(parentId) } : {}),
+            })
         });
 
         revalidatePath(`/dish/${postId}`);

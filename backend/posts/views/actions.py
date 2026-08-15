@@ -79,14 +79,23 @@ class CommentViewSet(viewsets.ModelViewSet):
     def get_queryset(self):
         queryset = (
             Comment.objects
-            .select_related('user')
-            .annotate(likes_total=Count('likes', distinct=True))
+            .select_related('user', 'parent__user')
+            .annotate(
+                likes_total=Count('likes', distinct=True),
+                replies_total=Count('replies', distinct=True),
+            )
             .order_by('created_at')
         )
 
+        # Ветка ответов запрашивается отдельно: `?parent=<id>`. Так список поста
+        # не раздувается ответами, которые почти никто не раскрывает.
+        parent_id = self.request.query_params.get('parent')
+        if parent_id:
+            return queryset.filter(parent_id=parent_id)
+
         post_id = self.request.query_params.get('post')
         if post_id:
-            queryset = queryset.filter(post_id=post_id)
+            queryset = queryset.filter(post_id=post_id, parent__isnull=True)
 
         user = self.request.user
         if user.is_authenticated:

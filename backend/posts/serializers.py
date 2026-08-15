@@ -726,12 +726,15 @@ class CommentSerializer(serializers.ModelSerializer):
     likes_count = serializers.SerializerMethodField()
     is_liked = serializers.SerializerMethodField()
     is_editable = serializers.SerializerMethodField()
+    replies_count = serializers.SerializerMethodField()
+    reply_to = serializers.SerializerMethodField()
 
     class Meta:
         model = Comment
         fields = [
             'id', 'post', 'user', 'user_detail', 'text', 'created_at',
             'likes_count', 'is_liked', 'is_editable',
+            'parent', 'replies_count', 'reply_to',
         ]
         read_only_fields = ['user', 'created_at']
 
@@ -746,6 +749,33 @@ class CommentSerializer(serializers.ModelSerializer):
         if value.status != Post.STATUS_APPROVED:
             raise serializers.ValidationError('Пост ещё не опубликован.')
         return value
+
+    def validate(self, attrs):
+        """Ответ должен относиться к тому же посту, что и комментарий-родитель."""
+        parent = attrs.get('parent')
+        post = attrs.get('post') or getattr(self.instance, 'post', None)
+        if parent is not None and post is not None and parent.post_id != post.id:
+            raise serializers.ValidationError(
+                {'parent': 'Комментарий из другого поста.'}
+            )
+        return attrs
+
+    def get_replies_count(self, obj):
+        """Сколько ответов в ветке — по этому числу рисуется «Ответы (N)»."""
+        annotated = getattr(obj, 'replies_total', None)
+        if annotated is not None:
+            return annotated
+        return obj.replies.count() if obj.parent_id is None else 0
+
+    def get_reply_to(self, obj):
+        """
+        Кому отвечают. Ветка плоская, поэтому без подписи непонятно, к чьей
+        реплике относится ответ, — показываем «@логин» в начале строки.
+        """
+        if not obj.parent_id:
+            return None
+        author = obj.parent.user
+        return author.username if author else None
 
     def get_likes_count(self, obj):
         # Если вьюха аннотировала — берём готовое, иначе считаем.

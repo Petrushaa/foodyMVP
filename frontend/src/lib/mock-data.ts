@@ -33,6 +33,10 @@ export type PostComment = {
   liked?: boolean;
   replyTo?: string;
   replyToCommentId?: PostComment["id"];
+  /** Корневой комментарий ветки. Пусто у самих корневых. */
+  parentId?: PostComment["id"] | null;
+  /** Сколько ответов в ветке — по нему рисуется «Ответы (N)». */
+  repliesCount?: number;
   clientId?: string;
   status?: "sending" | "sent" | "failed";
 };
