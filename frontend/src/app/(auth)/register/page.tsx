@@ -58,21 +58,21 @@ export default function RegisterPage() {
   return (
     <main className="absolute inset-0 overflow-hidden bg-[#F6F7F6]">
       <div className="absolute inset-0 flex flex-col px-5 pt-14 pb-10">
-        <header className="mb-8 text-center">
-          <h1 className="text-[40px] font-extrabold tracking-[-0.5px] text-[#15291C]">Foody</h1>
-          <p className="mt-2 text-[14.5px] leading-[1.45] font-medium text-[#5C6B62]">
-            Присоединяйтесь, чтобы находить лучшие блюда и заведения
-          </p>
-        </header>
+        <GlassSurface className="flex flex-1 flex-col rounded-[26px] border border-white/65 bg-white/45 px-5 pt-8 pb-5 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
+          <header className="mb-7 text-center">
+            <h1 className="text-[40px] font-extrabold tracking-[-0.5px] text-[#15291C]">Foody</h1>
+            <p className="mt-2 text-[14.5px] leading-[1.45] font-medium text-[#5C6B62]">
+              Присоединяйтесь, чтобы находить лучшие блюда и заведения
+            </p>
+          </header>
 
-        <div className="flex flex-1 flex-col">
           <form
             noValidate
             onSubmit={(e) => {
               e.preventDefault();
               handleSubmit(new FormData(e.currentTarget));
             }}
-            className="flex h-full flex-col gap-3 pt-1 pb-5"
+            className="flex flex-1 flex-col gap-3"
           >
             <GlassSurface className={FIELD_SURFACE}>
               <User className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 size-5 text-[#8A958E] z-10" />
@@ -159,7 +159,7 @@ export default function RegisterPage() {
               Продолжая, вы соглашаетесь с политикой конфиденциальности Foody
             </p>
           </form>
-        </div>
+        </GlassSurface>
       </div>
     </main>
   );
