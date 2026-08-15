@@ -758,7 +758,7 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
         setIsSubmitting(false);
         return;
       }
-      router.push("/profile");
+      router.push("/me");
     } catch (e: unknown) {
       setSubmitError(
         e instanceof Error ? e.message : "Не удалось опубликовать"

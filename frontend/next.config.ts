@@ -17,6 +17,12 @@ const nextConfig: NextConfig = {
   async rewrites() {
     return [{ source: "/media/:path*", destination: `${backendOrigin}/media/:path*` }];
   },
+  async redirects() {
+    // Профиль живёт по /me. Старый адрес оставляем для ссылок и закладок, но
+    // отвечаем обычным редиректом: серверный компонент, который сразу делает
+    // redirect(), React пытается замерить и ругается «negative time stamp».
+    return [{ source: "/profile", destination: "/me", permanent: false }];
+  },
   experimental: {
     serverActions: {
       bodySizeLimit: '10mb',

@@ -50,7 +50,7 @@ export default function RegisterPage() {
     if (res?.error) {
       setError(res.error);
     } else {
-      router.push("/profile");
+      router.push("/me");
       router.refresh();
     }
   }
