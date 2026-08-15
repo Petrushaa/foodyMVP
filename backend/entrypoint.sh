@@ -16,6 +16,15 @@ else
     python manage.py migrate --noinput
     echo "Сбор статики..."
     python manage.py collectstatic --noinput
+    # Иконки и порядок справочника лежат в репозитории и едут в образе, но
+    # применить их надо к базе. Обе команды идемпотентны: загруженное
+    # пропускается, порядок переписывается тем же значением.
+    # `|| true` — отсутствие папки или файла не повод не поднять сервис:
+    # интерфейс переживёт это на эмодзи и алфавите.
+    echo "Иконки справочника..."
+    python manage.py import_icons || true
+    echo "Порядок справочника..."
+    python manage.py apply_catalog_order || true
     echo "Создание суперпользователя..."
     python manage.py createsuperuser --noinput || true
     echo "Запуск сервера..."

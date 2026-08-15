@@ -122,3 +122,62 @@ class TestCatalogOrder:
 
         data = api_client.get('/api/v1/taxons/?kind=cuisine').data
         assert data[0]['slug'] == 'japanese'
+
+
+@pytest.mark.django_db
+class TestApplyCatalogOrder:
+    """
+    Порядок хранится в файле репозитория, чтобы ехать вместе с деплоем:
+    в базе он живёт только как результат применения этого файла.
+    """
+
+    @pytest.fixture
+    def order_file(self, tmp_path):
+        path = tmp_path / 'catalog_order.txt'
+        path.write_text(
+            '# комментарий\n\n[dish-types]\nПицца\nБургер\n\n[cuisine]\njapanese\n',
+            encoding='utf-8',
+        )
+        return path
+
+    def test_applies_listed_order(self, order_file, api_client):
+        call_command('apply_catalog_order', path=str(order_file))
+
+        names = [d['name'] for d in api_client.get('/api/v1/dish-types/').data[:2]]
+        assert names == ['Пицца', 'Бургер']
+        assert api_client.get('/api/v1/taxons/?kind=cuisine').data[0]['slug'] == 'japanese'
+
+    def test_unlisted_stay_alphabetical(self, order_file, api_client):
+        call_command('apply_catalog_order', path=str(order_file))
+
+        rest = [d['name'] for d in api_client.get('/api/v1/dish-types/').data[2:6]]
+        assert rest == sorted(rest)
+
+    def test_dry_run_changes_nothing(self, order_file):
+        call_command('apply_catalog_order', path=str(order_file), dry_run=True)
+
+        assert DishType.objects.get(name='Пицца').sort_order is None
+
+    def test_manual_order_survives_repeat(self, order_file):
+        """Без --reset команда не трогает то, чего нет в файле."""
+        DishType.objects.filter(name='Суши').update(sort_order=5)
+
+        call_command('apply_catalog_order', path=str(order_file))
+
+        assert DishType.objects.get(name='Суши').sort_order == 5
+
+    def test_reset_makes_file_the_only_truth(self, order_file):
+        DishType.objects.filter(name='Суши').update(sort_order=5)
+
+        call_command('apply_catalog_order', path=str(order_file), reset=True)
+
+        assert DishType.objects.get(name='Суши').sort_order is None
+        assert DishType.objects.get(name='Пицца').sort_order == 1
+
+    def test_unknown_name_does_not_break_the_rest(self, tmp_path):
+        path = tmp_path / 'order.txt'
+        path.write_text('[dish-types]\nТакого блюда нет\nПицца\n', encoding='utf-8')
+
+        call_command('apply_catalog_order', path=str(path))
+
+        assert DishType.objects.get(name='Пицца').sort_order == 2, 'позиция считается по строке'
