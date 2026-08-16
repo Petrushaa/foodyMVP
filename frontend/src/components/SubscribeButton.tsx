@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import styles from './SubscribeButton.module.css';
-import { toggleFollow } from '@/app/actions/social';
+import { toggleFollow } from '@/lib/feed-client';
 import { useRouter } from 'next/navigation';
 
 export default function SubscribeButton({ userId, initialIsFollowing, session }: { userId: number | string, initialIsFollowing: boolean, session: any }) {
@@ -37,17 +37,15 @@ export default function SubscribeButton({ userId, initialIsFollowing, session }:
         setLoading(true);
 
         try {
-            const res = await toggleFollow(userId, wasFollowing);
-
-            if (res?.error) {
-                setIsFollowing(wasFollowing);
-                setNotice(wasFollowing ? "Не удалось отписаться" : "Не удалось подписаться");
-                return;
-            }
+            // Обычный запрос через BFF-прокси, а не серверное действие.
+            // Действия выполняются по очереди и на каждое тянут перерисовку
+            // страницы: при частых нажатиях очередь вставала, и кнопка
+            // оставалась заблокированной, хотя подписка на сервере проходила.
+            await toggleFollow(String(userId), Number(userId), undefined, !wasFollowing);
 
             router.refresh(); // Обновить счётчик подписчиков.
         } catch {
-            // Действие упало — возвращаем кнопку в прежнее состояние и говорим
+            // Запрос не прошёл — возвращаем кнопку в прежнее состояние и говорим
             // об этом. Молча оставлять оптимистичный вид нельзя: человек решит,
             // что подписался.
             setIsFollowing(wasFollowing);
