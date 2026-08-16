@@ -5,9 +5,9 @@ import { ArrowLeft, MapPin } from "lucide-react";
 import { apiRequest, fixMediaUrl } from "@/lib/api";
 import { GuestPhotos } from "@/components/catalog/guest-photos";
 import type { GuestShot } from "@/components/catalog/guest-photos";
+import { ReviewCard } from "@/components/catalog/review-card";
 import { RatingStars } from "@/components/feed/rating-stars";
 import { GlassSurface } from "@/components/feed/glass-surface";
-import { UserAvatar } from "@/components/feed/user-avatar";
 import { CategoryIcon } from "@/components/categories/category-icon";
 
 /** «1 фото», «2 фото», «5 фотографий». */
@@ -26,54 +26,6 @@ function formatDate(value?: string | null) {
     day: "numeric",
     month: "long",
   });
-}
-
-function ReviewCard({ post }: { post: any }) {
-  const author = post.user?.full_name || post.user?.username || "Аноним";
-  const rating = post.author_rating ? post.author_rating / 2 : null;
-  const photos: string[] = (post.images ?? [])
-    .map((i: any) => fixMediaUrl(i.image))
-    .filter(Boolean);
-
-  return (
-    <Link href={`/dish/${post.id}`} className="block">
-      <GlassSurface className="rounded-[22px] border border-white/65 bg-white/45 px-4 py-3.5 shadow-[0_8px_24px_rgba(20,40,28,0.10)]">
-        <div className="flex items-center gap-2.5">
-          <UserAvatar name={author} src={fixMediaUrl(post.user?.avatar)} size={34} />
-          <div className="min-w-0 flex-1">
-            <div className="truncate text-[14px] font-extrabold text-[#15291C]">{author}</div>
-            <div className="text-[11.5px] font-medium text-[#8A958E]">
-              {post.created_at
-                ? new Date(post.created_at).toLocaleDateString("ru-RU")
-                : ""}
-            </div>
-          </div>
-          {rating !== null && <RatingStars rating={rating} size={17} />}
-        </div>
-
-        {post.description && (
-          <p className="mt-2.5 text-[14px] leading-[1.45] font-medium text-[#5C6B62]">
-            {post.description}
-          </p>
-        )}
-
-        {photos.length > 0 && (
-          <div className="mt-3 flex gap-2">
-            {photos.slice(0, 3).map((url, i) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={i}
-                src={url}
-                alt=""
-                aria-hidden="true"
-                className="size-14 rounded-[12px] object-cover"
-              />
-            ))}
-          </div>
-        )}
-      </GlassSurface>
-    </Link>
-  );
 }
 
 export default async function MenuItemPage({
@@ -275,7 +227,24 @@ export default async function MenuItemPage({
                   Об этом блюде ещё никто не написал.
                 </div>
               ) : (
-                posts.map((post) => <ReviewCard key={post.id} post={post} />)
+                posts.map((post) => (
+                  <ReviewCard
+                    key={post.id}
+                    review={{
+                      postId: post.id,
+                      author: post.user?.full_name || post.user?.username || "Аноним",
+                      avatar: fixMediaUrl(post.user?.avatar) || undefined,
+                      when: post.created_at
+                        ? new Date(post.created_at).toLocaleDateString("ru-RU")
+                        : "",
+                      rating: post.author_rating ? post.author_rating / 2 : null,
+                      text: post.description || "",
+                      photos: (post.images ?? [])
+                        .map((image: any) => fixMediaUrl(image.image))
+                        .filter(Boolean) as string[],
+                    }}
+                  />
+                ))
               )}
             </div>
           </section>
