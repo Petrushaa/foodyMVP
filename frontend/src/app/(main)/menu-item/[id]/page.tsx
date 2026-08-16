@@ -1,8 +1,11 @@
 import { auth } from "@/auth";
 import Link from "next/link";
-import { ArrowLeft, MapPin, Star } from "lucide-react";
+import { ArrowLeft, MapPin } from "lucide-react";
 
 import { apiRequest, fixMediaUrl } from "@/lib/api";
+import { GuestPhotos } from "@/components/catalog/guest-photos";
+import type { GuestShot } from "@/components/catalog/guest-photos";
+import { RatingStars } from "@/components/feed/rating-stars";
 import { GlassSurface } from "@/components/feed/glass-surface";
 import { UserAvatar } from "@/components/feed/user-avatar";
 import { CategoryIcon } from "@/components/categories/category-icon";
@@ -25,59 +28,9 @@ function formatDate(value?: string | null) {
   });
 }
 
-type Shot = {
-  url: string;
-  postId: number;
-  author: string;
-  avatar?: string;
-  rating: string | null;
-  text: string;
-};
-
-/**
- * Снимок гостя с куском отзыва — как в карточке товара на маркетплейсе.
- *
- * Ведёт на сам пост: фотография без автора мало что значит, а прочитать
- * отзыв целиком хочется ровно в тот момент, когда фото зацепило.
- */
-function GuestShot({ shot }: { shot: Shot }) {
-  return (
-    <Link
-      href={`/dish/${shot.postId}`}
-      className="group relative block aspect-[3/4] w-[9.5rem] shrink-0 snap-start overflow-hidden rounded-[18px] border border-white/65 shadow-[0_8px_22px_rgba(20,40,28,0.10)]"
-    >
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img
-        src={shot.url}
-        alt={`Фото от ${shot.author}`}
-        className="size-full object-cover transition-transform duration-300 group-hover:scale-[1.04]"
-      />
-
-      <div className="pointer-events-none absolute inset-x-0 bottom-0 h-3/5 bg-gradient-to-t from-black/80 via-black/35 to-transparent" />
-
-      <div className="pointer-events-none absolute inset-x-2 bottom-2 text-white">
-        <div className="flex items-center gap-1.5">
-          <UserAvatar name={shot.author} src={shot.avatar} size={20} />
-          <span className="truncate text-[11px] font-extrabold">{shot.author}</span>
-          {shot.rating && (
-            <span className="ml-auto shrink-0 rounded-full bg-white/95 px-1.5 py-0.5 text-[10px] font-extrabold text-[#15291C]">
-              {shot.rating}
-            </span>
-          )}
-        </div>
-        {shot.text && (
-          <p className="mt-1 line-clamp-2 text-[11px] leading-[1.25] font-medium text-white/90">
-            {shot.text}
-          </p>
-        )}
-      </div>
-    </Link>
-  );
-}
-
 function ReviewCard({ post }: { post: any }) {
   const author = post.user?.full_name || post.user?.username || "Аноним";
-  const rating = post.author_rating ? (post.author_rating / 2).toFixed(1) : null;
+  const rating = post.author_rating ? post.author_rating / 2 : null;
   const photos: string[] = (post.images ?? [])
     .map((i: any) => fixMediaUrl(i.image))
     .filter(Boolean);
@@ -95,11 +48,7 @@ function ReviewCard({ post }: { post: any }) {
                 : ""}
             </div>
           </div>
-          {rating && (
-            <span className="shrink-0 rounded-full bg-[#2ECC71] px-2.5 py-1 text-[12px] font-extrabold text-white">
-              {rating}
-            </span>
-          )}
+          {rating !== null && <RatingStars rating={rating} size={17} />}
         </div>
 
         {post.description && (
@@ -162,7 +111,7 @@ export default async function MenuItemPage({
 
   // Все снимки гостей в одной ленте: каждый помнит, из какого он поста,
   // чтобы с фотографии можно было уйти к автору и целому отзыву.
-  const shots: Shot[] = posts.flatMap((post) =>
+  const shots: GuestShot[] = posts.flatMap((post) =>
     (post.images ?? [])
       .map((image: any) => fixMediaUrl(image.image))
       .filter(Boolean)
@@ -171,13 +120,13 @@ export default async function MenuItemPage({
         postId: post.id,
         author: post.user?.full_name || post.user?.username || "Аноним",
         avatar: fixMediaUrl(post.user?.avatar) || undefined,
-        rating: post.author_rating ? (post.author_rating / 2).toFixed(1) : null,
+        rating: post.author_rating ? post.author_rating / 2 : null,
         text: post.description || "",
       })),
   );
 
   const heroShots = shots.length > 0 ? shots : null;
-  const rating = item.ratings_count > 0 ? (item.rating_raw / 2).toFixed(1) : null;
+  const rating = item.ratings_count > 0 ? item.rating_raw / 2 : null;
   const price = item.price ? `₽${Math.round(parseFloat(item.price))}` : null;
   const priceDate = formatDate(item.price_confirmed_at);
   const cuisine = (item.taxons ?? []).find((t: any) => t.kind === "cuisine");
@@ -219,19 +168,16 @@ export default async function MenuItemPage({
             >
               <ArrowLeft className="size-5" strokeWidth={2.3} />
             </Link>
-            {shots.length > 1 && (
-              <span className="rounded-full bg-white/90 px-3 py-1.5 text-[12px] font-extrabold text-[#15291C] backdrop-blur-[10px]">
-                {shots.length} {plural(shots.length, "фото", "фото", "фото")}
-              </span>
-            )}
           </div>
 
           <div className="absolute inset-x-0 bottom-0 px-4 pb-4">
             <div className="flex flex-wrap items-center gap-1.5">
-              {rating && (
-                <span className="inline-flex items-center gap-1 rounded-full bg-[#2ECC71] px-2.5 py-1 text-[12.5px] font-extrabold text-white">
-                  <Star className="size-3.5 fill-current" strokeWidth={0} />
-                  {rating}
+              {rating !== null && (
+                <span className="inline-flex items-center gap-1.5 rounded-full bg-white/92 px-2.5 py-1">
+                  <RatingStars rating={rating} size={14} />
+                  <span className="text-[12.5px] font-extrabold text-[#15291C] tabular-nums">
+                    {rating.toFixed(1)}
+                  </span>
                 </span>
               )}
               {cuisine && (
@@ -263,7 +209,10 @@ export default async function MenuItemPage({
 
         <div className="px-4 pt-4">
           {/* ─── Цена и переход к своему отзыву ─── */}
-          <GlassSurface className="flex items-center justify-between gap-3 rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10)]">
+          <GlassSurface
+            className="rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10)]"
+            contentClassName="flex items-center justify-between gap-3"
+          >
             <div className="min-w-0">
               <div className="text-[24px] leading-none font-extrabold tracking-[-0.4px] text-[#15291C]">
                 {price ?? "—"}
@@ -310,14 +259,13 @@ export default async function MenuItemPage({
           {/* ─── Снимки гостей с куском отзыва ─── */}
           {shots.length > 0 && (
             <section className="mt-6">
-              <h2 className="mb-2.5 px-1 text-[16px] font-extrabold tracking-[-0.2px] text-[#15291C]">
+              <h2 className="mb-2.5 flex items-baseline gap-2 px-1 text-[16px] font-extrabold tracking-[-0.2px] text-[#15291C]">
                 Фотографии гостей
+                <span className="text-[13px] font-bold text-[#8A958E] tabular-nums">
+                  {shots.length}
+                </span>
               </h2>
-              <div className="hide-scroll -mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1">
-                {shots.map((shot, i) => (
-                  <GuestShot key={`${shot.postId}-${i}`} shot={shot} />
-                ))}
-              </div>
+              <GuestPhotos shots={shots} />
             </section>
           )}
 

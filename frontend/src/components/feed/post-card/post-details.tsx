@@ -1,48 +1,8 @@
-import { MapPin, Star } from "lucide-react";
+import { MapPin } from "lucide-react";
 import Link from "next/link";
 
 import type { Post } from "@/lib/mock-data";
-
-const STAR_YELLOW = "#FFB400";
-const STAR_EMPTY = "#DBDFDB";
-
-/** 5 звёзд: горит столько, сколько поставил автор (как в форме отзыва). */
-function RatingStars({ rating }: { rating: number }) {
-  return (
-    <span
-      className="inline-flex shrink-0 items-center gap-0.5"
-      aria-label={`Оценка ${rating} из 5`}
-    >
-      {[0, 1, 2, 3, 4].map((index) => {
-        const fill = Math.max(0, Math.min(1, rating - index));
-        return (
-          <span key={index} className="relative inline-grid place-items-center">
-            <Star
-              className="size-[20px]"
-              strokeWidth={0}
-              color={STAR_EMPTY}
-              fill={STAR_EMPTY}
-            />
-            {fill > 0 && (
-              <span
-                aria-hidden="true"
-                className="pointer-events-none absolute inset-0 grid place-items-center overflow-hidden"
-                style={{ clipPath: `inset(0 ${100 - fill * 100}% 0 0)` }}
-              >
-                <Star
-                  className="size-[20px]"
-                  strokeWidth={0}
-                  color={STAR_YELLOW}
-                  fill={STAR_YELLOW}
-                />
-              </span>
-            )}
-          </span>
-        );
-      })}
-    </span>
-  );
-}
+import { RatingStars } from "@/components/feed/rating-stars";
 
 type PostDetailsProps = {
   post: Post;

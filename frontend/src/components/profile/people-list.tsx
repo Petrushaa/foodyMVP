@@ -67,7 +67,10 @@ export async function PeopleList({
                         <div className="flex flex-col gap-2">
                             {people.map((person) => (
                                 <Link key={person.id} href={`/users/${person.id}`}>
-                                    <GlassSurface className="flex items-center gap-3 rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
+                                    <GlassSurface
+                                        className="rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]"
+                                        contentClassName="flex items-center gap-3"
+                                    >
                                         <UserAvatar
                                             name={person.full_name || person.username}
                                             src={fixAvatarUrl(person.avatar) || ""}
