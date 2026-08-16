@@ -68,7 +68,13 @@ async function handle(
   const cd = upstream.headers.get("content-disposition");
   if (cd) respHeaders.set("content-disposition", cd);
 
-  return new Response(await upstream.arrayBuffer(), {
+  // 204, 205 и 304 не имеют тела по спецификации, и конструктор Response
+  // на попытку его подставить бросает TypeError. Прокси падал с 500 там, где
+  // бэкенд отвечал «всё хорошо, сказать нечего» — например на отписке.
+  const withoutBody = upstream.status === 204 || upstream.status === 205
+    || upstream.status === 304;
+
+  return new Response(withoutBody ? null : await upstream.arrayBuffer(), {
     status: upstream.status,
     headers: respHeaders,
   });
