@@ -45,8 +45,16 @@ class Command(BaseCommand):
             '--replace', action='store_true',
             help='Перезаписывать уже загруженные иконки. По умолчанию пропускаются.',
         )
+        parser.add_argument(
+            '--missing', action='store_true',
+            help='Показать, каким записям иконки не хватает и как назвать файлы.',
+        )
 
     def handle(self, *args, **options):
+        if options['missing']:
+            self._report_missing(Path(options['path']))
+            return
+
         root = Path(options['path'])
         if not root.is_dir():
             raise CommandError(f'Папки {root} нет — положите иконки или укажите --path.')
@@ -62,6 +70,38 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS(
             ('Так было бы: ' if self.dry_run else '') + summary
         ))
+
+    def _report_missing(self, root):
+        """
+        Печатает, какие файлы нужны и каких ещё нет.
+
+        Имя файла — это ключ записи, а в справочнике 183 записи: без такого
+        списка их пришлось бы выписывать из админки руками.
+        """
+        groups = [
+            (root / 'dish-types', 'Блюда', [
+                (d.name, bool(d.icon)) for d in DishType.objects.all()
+            ]),
+        ]
+        for kind, label in Taxon.KIND_CHOICES:
+            groups.append((
+                root / 'taxons' / kind,
+                f'Категории — {label}',
+                [(t.slug, bool(t.icon)) for t in Taxon.objects.filter(kind=kind)],
+            ))
+
+        total_missing = 0
+        for folder, label, items in groups:
+            missing = [key for key, has_icon in items if not has_icon]
+            total_missing += len(missing)
+            done = len(items) - len(missing)
+            self.stdout.write(self.style.MIGRATE_HEADING(
+                f'\n{label}: загружено {done} из {len(items)} → {folder}/'
+            ))
+            for key in missing:
+                self.stdout.write(f'  {key}.png')
+
+        self.stdout.write(self.style.SUCCESS(f'\nВсего не хватает: {total_missing}'))
 
     def _files(self, folder):
         if not folder.is_dir():

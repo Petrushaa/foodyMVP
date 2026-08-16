@@ -181,3 +181,22 @@ class TestApplyCatalogOrder:
         call_command('apply_catalog_order', path=str(path))
 
         assert DishType.objects.get(name='Пицца').sort_order == 2, 'позиция считается по строке'
+
+
+@pytest.mark.django_db
+class TestMissingReport:
+    """Список ожидаемых имён файлов: без него их пришлось бы выписывать руками."""
+
+    def test_lists_records_without_icons(self, capsys, burger):
+        call_command('import_icons', missing=True)
+
+        out = capsys.readouterr().out
+        assert f'{burger.name}.png' in out
+        assert 'Блюда:' in out and 'Кухня' in out
+
+    def test_loaded_icons_leave_the_list(self, capsys, icons_dir, burger):
+        call_command('import_icons', path=str(icons_dir))
+        call_command('import_icons', missing=True)
+
+        out = capsys.readouterr().out
+        assert f'{burger.name}.png' not in out, 'загруженное больше не просят'
