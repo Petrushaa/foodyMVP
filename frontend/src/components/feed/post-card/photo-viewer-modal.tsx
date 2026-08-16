@@ -454,6 +454,17 @@ export function PhotoViewerModal({
                 shouldReduceMotion={shouldReduceMotion}
               />
             )}
+
+            {/* Поверх кадра, а не под ним: блок в потоке отнимал бы у фотографии
+                высоту и сплющивал её. */}
+            {footer && (
+              <div
+                className="absolute inset-x-0 bottom-0 z-20"
+                onClick={(event) => event.stopPropagation()}
+              >
+                {footer}
+              </div>
+            )}
           </motion.div>
 
           <motion.button
@@ -465,15 +476,6 @@ export function PhotoViewerModal({
           >
             <X className="size-5 max-[430px]:size-4.5" strokeWidth={2.45} />
           </motion.button>
-
-          {footer && (
-            <div
-              className="z-20 mt-3 w-full max-w-[560px] px-3"
-              onClick={(event) => event.stopPropagation()}
-            >
-              {footer}
-            </div>
-          )}
 
           {hasMultiplePhotos && (
             <div className="pointer-events-none z-20 mt-4 flex gap-1.5 rounded-full border border-white/25 bg-white/[0.1] p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">
