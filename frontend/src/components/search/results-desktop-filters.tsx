@@ -150,13 +150,13 @@ export function ResultsDesktopFilters({ groups }: { groups: CategoryGroups }) {
               >
                 <span
                   className={cn(
-                    "grid aspect-square w-full place-items-center rounded-[16px] text-[22px] transition-colors",
+                    "grid aspect-square w-full place-items-center overflow-hidden rounded-[16px] text-[22px] transition-colors",
                     isActive
-                      ? "bg-[#2ECC71]"
+                      ? "bg-[#2ECC71] ring-2 ring-[#2ECC71] ring-offset-2"
                       : "bg-white shadow-[0_4px_12px_rgba(20,40,28,0.07),inset_0_0_0_1.5px_#2ECC71]"
                   )}
                 >
-                  <CategoryIcon icon={chip.icon} emoji={chip.emoji} size={26} />
+                  <CategoryIcon icon={chip.icon} emoji={chip.emoji} size={26} fill />
                 </span>
                 <span className="line-clamp-2 w-full text-center text-[10.5px] leading-[1.15] font-bold text-[#15291C] [overflow-wrap:anywhere]">
                   {chip.label}

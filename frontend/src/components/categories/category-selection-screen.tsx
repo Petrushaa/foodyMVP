@@ -174,9 +174,9 @@ function PopularCategoryGrid({
           whileTap={canAnimate(shouldReduceMotion) ? { scale: 0.94 } : undefined}
         >
           <span
-            className="grid aspect-square w-full place-items-center rounded-[22px] bg-white text-[30px] shadow-[0_8px_20px_rgba(20,40,28,0.08),inset_0_0_0_1.5px_#2ECC71] transition-transform duration-200 group-hover:-translate-y-0.5 max-[380px]:text-[26px]"
+            className="grid aspect-square w-full place-items-center overflow-hidden rounded-[22px] bg-white text-[30px] shadow-[0_8px_20px_rgba(20,40,28,0.08),inset_0_0_0_1.5px_#2ECC71] transition-transform duration-200 group-hover:-translate-y-0.5 max-[380px]:text-[26px]"
           >
-            <CategoryIcon icon={category.icon} emoji={category.emoji} size={30} />
+            <CategoryIcon icon={category.icon} emoji={category.emoji} size={30} fill />
           </span>
           <span
             className={cn(
