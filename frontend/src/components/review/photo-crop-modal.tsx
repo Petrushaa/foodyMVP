@@ -3,7 +3,6 @@
 import {
   useCallback,
   useEffect,
-  useMemo,
   useRef,
   useState,
   type PointerEvent as ReactPointerEvent,
@@ -34,8 +33,19 @@ type PhotoCropModalProps = {
  * пальцем и зум ползунком. То, что в рамке, — то и попадёт в пост.
  */
 export function PhotoCropModal({ file, onCancel, onApply }: PhotoCropModalProps) {
-  const url = useMemo(() => URL.createObjectURL(file), [file]);
-  useEffect(() => () => URL.revokeObjectURL(url), [url]);
+  // Ссылку создаём и отзываем в одном эффекте. Раньше она жила в useMemo,
+  // а отзывалась в эффекте — и в строгом режиме, где React монтирует дважды,
+  // очистка убивала ссылку, которую useMemo при повторном монтировании уже
+  // не пересчитывал. Кадр оставался пустым, а «Готово» — заблокированным.
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+
+  useEffect(() => {
+    const objectUrl = URL.createObjectURL(file);
+    setUrl(objectUrl);
+    setFailed(false);
+    return () => URL.revokeObjectURL(objectUrl);
+  }, [file]);
 
   const frameRef = useRef<HTMLDivElement>(null);
   const imgRef = useRef<HTMLImageElement>(null);
@@ -180,7 +190,7 @@ export function PhotoCropModal({ file, onCancel, onApply }: PhotoCropModalProps)
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
             ref={imgRef}
-            src={url}
+            src={url ?? undefined}
             alt="Обрезка"
             draggable={false}
             onLoad={(e) =>
@@ -189,6 +199,9 @@ export function PhotoCropModal({ file, onCancel, onApply }: PhotoCropModalProps)
                 h: e.currentTarget.naturalHeight,
               })
             }
+            // Молчаливо пустой кадр не отличить от «ещё грузится»: если снимок
+            // не открылся, честно говорим об этом, а не оставляем чёрный квадрат.
+            onError={() => setFailed(true)}
             style={{
               position: "absolute",
               left: "50%",
@@ -200,6 +213,14 @@ export function PhotoCropModal({ file, onCancel, onApply }: PhotoCropModalProps)
             }}
             className="pointer-events-none select-none"
           />
+          {failed && (
+            <div className="absolute inset-0 grid place-items-center bg-black/70 px-6 text-center">
+              <p className="text-[14px] font-semibold text-white/90">
+                Не удалось открыть снимок. Отмените и выберите фото заново.
+              </p>
+            </div>
+          )}
+
           {/* сетка-подсказка */}
           <div className="pointer-events-none absolute inset-0 grid grid-cols-3 grid-rows-3">
             {Array.from({ length: 9 }).map((_, i) => (
