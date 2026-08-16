@@ -7,9 +7,7 @@ import { SearchResultsHeader } from "@/components/search/search-results-header";
 import {
   getCuisineCategories,
   getDishCategories,
-  getDietCategories,
-  getFormCategories,
-  getFormatCategories,
+  getTypeCategories,
 } from "@/lib/categories";
 import type { CategoryGroups } from "@/components/search/results-category-control";
 import {
@@ -26,9 +24,7 @@ type SearchResultsPageProps = {
     price_max?: string | string[];
     dish_type?: string | string[];
     cuisine?: string | string[];
-    format?: string | string[];
-    form?: string | string[];
-    diet?: string | string[];
+    type?: string | string[];
   }>;
 };
 
@@ -46,30 +42,23 @@ export default async function SearchResultsPage({
   const axes = {
     dish_type: getSingleSearchParam(params.dish_type),
     cuisine: getSingleSearchParam(params.cuisine),
-    format: getSingleSearchParam(params.format),
-    form: getSingleSearchParam(params.form),
-    diet: getSingleSearchParam(params.diet),
+    // Видов можно выбрать несколько — приходят через запятую.
+    type: getSingleSearchParam(params.type),
   };
 
   const session = (await auth()) as any;
   const accessToken: string | null = session?.user?.accessToken ?? null;
 
-  // Группы категорий для фильтра в шапке результатов (Блюда / Кухни / Формат).
-  // Заглушка на фронте; сейчас фильтруют через текстовый запрос q.
-  // Все четыре оси справочника плюс сами блюда — приходят с бэкенда вместе с иконками.
-  const [dishes, cuisines, formats, forms, diets] = await Promise.all([
+  // Три группы для фильтра в шапке: блюда, кухни и виды.
+  const [dishes, cuisines, types] = await Promise.all([
     getDishCategories(),
     getCuisineCategories(),
-    getFormatCategories(),
-    getFormCategories(),
-    getDietCategories(),
+    getTypeCategories(),
   ]);
   const categoryGroups: CategoryGroups = {
     dishes: dishes.map((c) => ({ id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
     cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
-    formats: formats.map((c) => ({ id: `fmt-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
-    forms: forms.map((c) => ({ id: `frm-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
-    diets: diets.map((c) => ({ id: `diet-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
+    types: types.map((c) => ({ id: `type-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
   };
 
   const qs = new URLSearchParams();

@@ -1,6 +1,9 @@
 import { apiRequest, fixMediaUrl } from "@/lib/api";
 
-export type CategoryMode = "dishes" | "cuisines" | "formats" | "forms" | "diets";
+// Оси справочника. Формат, форма и особенности слиты в один «вид»: делить
+// «фастфуд», «бургеры» и «веганское» по трём вкладкам значило бы заставлять
+// человека угадывать, в какой из них лежит нужное.
+export type CategoryMode = "dishes" | "cuisines" | "types";
 
 export type FoodCategory = {
   id: string;
@@ -164,23 +167,18 @@ export async function getCuisineCategories() {
   return (await loadTaxons("cuisine", "cuisines")) ?? cloneCategories(CUISINE_CATEGORIES);
 }
 
-/** Формат еды: фастфуд, стритфуд, кофейня и так далее. Ось «format» на бэкенде. */
-export async function getFormatCategories(): Promise<FoodCategory[]> {
-  const loaded = await loadTaxons("format", "formats");
+/**
+ * Виды еды: фастфуд, бургеры, веганское, десерты — всё в одной оси.
+ *
+ * У позиции их может быть несколько сразу (веганский фастфуд), поэтому в
+ * интерфейсе это единственная вкладка с множественным выбором.
+ */
+export async function getTypeCategories(): Promise<FoodCategory[]> {
+  const loaded = await loadTaxons("type", "types");
   if (loaded) return loaded;
   return PLACE_CATEGORIES.map((c) => ({
-    id: c.id, label: c.label, emoji: c.emoji, mode: "formats" as const,
+    id: c.id, label: c.label, emoji: c.emoji, mode: "types" as const,
   }));
-}
-
-/** Форма еды: супы, салаты, десерты, выпечка. Ось «form» на бэкенде. */
-export async function getFormCategories(): Promise<FoodCategory[]> {
-  return (await loadTaxons("form", "forms")) ?? [];
-}
-
-/** Дополнительные признаки: вегетарианское, постное, ПП. Ось «diet». */
-export async function getDietCategories(): Promise<FoodCategory[]> {
-  return (await loadTaxons("diet", "diets")) ?? [];
 }
 
 /**

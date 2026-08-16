@@ -100,7 +100,7 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
     """
     Позиции: поиск, карточка блюда и его посты.
 
-    Фильтры по четырём осям: `?cuisine=american&format=fastfood&form=burgers&diet=vegan`.
+    Фильтры по осям: `?cuisine=american&type=fastfood,vegan`.
     Значения — слаги категорий, можно перечислять через запятую.
     """
 
@@ -118,13 +118,24 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
             .with_photo()
         )
 
-        for kind in (Taxon.KIND_CUISINE, Taxon.KIND_FORMAT, Taxon.KIND_FORM, Taxon.KIND_DIET):
-            raw = self.request.query_params.get(kind)
-            if not raw:
-                continue
+        # Кухня у позиции одна, поэтому несколько кухонь — это «или»: выбрал
+        # японскую и итальянскую, получил и то, и другое.
+        raw = self.request.query_params.get(Taxon.KIND_CUISINE)
+        if raw:
             slugs = [slug.strip() for slug in raw.split(',') if slug.strip()]
-            # Несколько осей сужают выдачу, несколько значений одной оси — расширяют.
-            queryset = queryset.filter(taxons__kind=kind, taxons__slug__in=slugs)
+            queryset = queryset.filter(
+                taxons__kind=Taxon.KIND_CUISINE, taxons__slug__in=slugs,
+            )
+
+        # Видов у позиции сколько угодно, поэтому несколько видов — это «и»:
+        # «фастфуд + веганское» это веганский фастфуд, а не «весь фастфуд плюс
+        # всё веганское». Каждое значение добавляет свой join, отсюда цикл.
+        raw = self.request.query_params.get(Taxon.KIND_TYPE)
+        if raw:
+            for slug in [s.strip() for s in raw.split(',') if s.strip()]:
+                queryset = queryset.filter(
+                    taxons__kind=Taxon.KIND_TYPE, taxons__slug=slug,
+                )
 
         restaurant_id = self.request.query_params.get('restaurant')
         if restaurant_id:

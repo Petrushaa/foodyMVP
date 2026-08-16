@@ -4,10 +4,7 @@ import {
   fetchPopularTags,
   getCuisineCategories,
   getDishCategories,
-  getDietCategories,
-  getFormCategories,
-  getFormatCategories,
-  getPlaceCategories,
+  getTypeCategories,
 } from "@/lib/categories";
 import type { CategoryGroups } from "@/components/search/results-category-control";
 import { DEFAULT_TWEAKS } from "@/lib/tweaks";
@@ -19,21 +16,16 @@ export default async function SearchPage() {
   // Популярные теги из API (для экрана поиска, раздел «Популярное»).
   const popularTags = await fetchPopularTags(accessToken, 12);
 
-  // Категории тремя группами (Блюда / Кухни / Формат) — заглушки на фронте.
-  // Все четыре оси справочника плюс сами блюда — приходят с бэкенда вместе с иконками.
-  const [dishes, cuisines, formats, forms, diets] = await Promise.all([
+  // Три группы: блюда, кухни и виды. Приходят с бэкенда вместе с иконками.
+  const [dishes, cuisines, types] = await Promise.all([
     getDishCategories(),
     getCuisineCategories(),
-    getFormatCategories(),
-    getFormCategories(),
-    getDietCategories(),
+    getTypeCategories(),
   ]);
   const categoryGroups: CategoryGroups = {
     dishes: dishes.map((c) => ({ id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
     cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
-    formats: formats.map((c) => ({ id: `fmt-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
-    forms: forms.map((c) => ({ id: `frm-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
-    diets: diets.map((c) => ({ id: `diet-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
+    types: types.map((c) => ({ id: `type-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
   };
 
   return (

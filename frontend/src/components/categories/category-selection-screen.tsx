@@ -24,9 +24,7 @@ import { CategoryModeToggle } from "@/components/categories/category-mode-toggle
 import {
   getCuisineCategories,
   getDishCategories,
-  getDietCategories,
-  getFormCategories,
-  getFormatCategories,
+  getTypeCategories,
   getPopularCuisineCategories,
   getPopularDishCategories,
   matchCategoryByName,
@@ -41,24 +39,20 @@ import { CategoryIcon } from "@/components/categories/category-icon";
 
 type CategorySelectionSource = "review" | "search";
 
-type CategoryTab = "dishes" | "cuisines" | "formats" | "forms" | "diets";
+type CategoryTab = "dishes" | "cuisines" | "types";
 
-const MODE_ORDER: CategoryTab[] = ["dishes", "cuisines", "formats", "forms", "diets"];
+const MODE_ORDER: CategoryTab[] = ["dishes", "cuisines", "types"];
 
 const CATEGORY_TABS: readonly { id: CategoryTab; label: string }[] = [
   { id: "dishes", label: "Блюда" },
   { id: "cuisines", label: "Кухни" },
-  { id: "formats", label: "Формат" },
-  { id: "forms", label: "Форма" },
-  { id: "diets", label: "Особенности" },
+  { id: "types", label: "Виды" },
 ];
 
 const ALL_SECTION_TITLE: Record<CategoryTab, string> = {
   dishes: "Все блюда",
   cuisines: "Все кухни",
-  formats: "Все форматы",
-  forms: "Все формы",
-  diets: "Все особенности",
+  types: "Все виды",
 };
 
 type CategorySelectionScreenProps = {
@@ -78,10 +72,8 @@ type CategoryData = {
   cuisines: FoodCategory[];
   popularDishes: FoodCategory[];
   popularCuisines: FoodCategory[];
-  // Три оси справочника кроме кухни: формат еды, форма еды и доп. признаки.
-  formats: FoodCategory[];
-  forms: FoodCategory[];
-  diets: FoodCategory[];
+  // Вид еды: бывшие формат, форма и особенности в одной оси.
+  types: FoodCategory[];
 };
 
 type LoadState =
@@ -228,20 +220,18 @@ export function CategorySelectionScreen({
     setLoadState({ status: "loading", data: null, error: null });
 
     try {
-      const [dishes, cuisines, popularDishes, popularCuisines, formats, forms, diets] =
+      const [dishes, cuisines, popularDishes, popularCuisines, types] =
         await Promise.all([
           getDishCategories(),
           getCuisineCategories(),
           getPopularDishCategories(),
           getPopularCuisineCategories(),
-          getFormatCategories(),
-          getFormCategories(),
-          getDietCategories(),
+          getTypeCategories(),
         ]);
 
       setLoadState({
         status: "success",
-        data: { dishes, cuisines, popularDishes, popularCuisines, formats, forms, diets },
+        data: { dishes, cuisines, popularDishes, popularCuisines, types },
         error: null,
       });
     } catch {
@@ -280,11 +270,9 @@ export function CategorySelectionScreen({
           : await getDishCategories();
 
         // Все оси справочника теперь на бэкенде, вместе с иконками.
-        const [cuisines, formats, forms, diets] = await Promise.all([
+        const [cuisines, types] = await Promise.all([
           getCuisineCategories(),
-          getFormatCategories(),
-          getFormCategories(),
-          getDietCategories(),
+          getTypeCategories(),
         ]);
         const popularDishes = useApi
           ? dishesFromApi.slice(0, 4)
@@ -300,9 +288,7 @@ export function CategorySelectionScreen({
             cuisines,
             popularDishes,
             popularCuisines,
-            formats,
-            forms,
-            diets,
+            types,
           },
           error: null,
         });
@@ -328,9 +314,7 @@ export function CategorySelectionScreen({
     if (loadState.status !== "success") return [];
     if (mode === "dishes") return loadState.data.dishes;
     if (mode === "cuisines") return loadState.data.cuisines;
-    if (mode === "forms") return loadState.data.forms;
-    if (mode === "diets") return loadState.data.diets;
-    return loadState.data.formats;
+    return loadState.data.types;
   }, [loadState, mode]);
 
   const currentPopularCategories = useMemo(() => {

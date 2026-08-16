@@ -217,19 +217,29 @@ class TestCatalogAxisFilters:
             response = api_client.get(f'{self.URL}?{taxon.kind}={taxon.slug}')
             assert response.data['count'] == 1, f'ось {taxon.kind} не отфильтровала'
 
-    def test_format_axis_is_not_eaten_by_drf(self, api_client, author, moderator,
-                                             make_post):
+    def test_several_types_narrow_each_other(self, api_client, author, moderator,
+                                              make_post):
         """
-        `format` — зарезервированное имя в DRF: он разбирает его как выбор
-        формата ответа и отдаёт 404 на незнакомое значение. Имя освобождено
-        настройкой URL_FORMAT_OVERRIDE, и этот тест сторожит именно её.
+        Несколько видов — это «и», а не «или»: «фастфуд + веганское» должно
+        давать веганский фастфуд, а не весь фастфуд плюс всё веганское.
         """
         item = self._published(make_post, author, moderator)
-        taxon = item.taxons.filter(kind='format').first()
+        types = list(item.taxons.filter(kind='type').values_list('slug', flat=True))
+        assert len(types) >= 2, 'у блюда должно быть хотя бы два вида'
 
-        response = api_client.get(f'{self.URL}?format={taxon.slug}')
+        both = api_client.get(f'{self.URL}?type={types[0]},{types[1]}')
+        assert both.data['count'] == 1
 
-        assert response.status_code == 200
+        missing = api_client.get(f'{self.URL}?type={types[0]},такого-вида-нет')
+        assert missing.data['count'] == 0, 'непопадание хотя бы по одному отсекает'
+
+    def test_several_cuisines_widen(self, api_client, author, other_author,
+                                    moderator, make_post):
+        """Кухня у позиции одна, поэтому несколько кухонь — это «или»."""
+        first = self._published(make_post, author, moderator)
+        cuisine = first.taxons.get(kind='cuisine').slug
+
+        response = api_client.get(f'{self.URL}?cuisine={cuisine},такой-кухни-нет')
         assert response.data['count'] == 1
 
     def test_dish_type_filters_by_name(self, api_client, author, moderator, make_post,

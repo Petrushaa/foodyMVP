@@ -23,19 +23,15 @@ export type CategoryChip = {
 export type CategoryGroups = {
   dishes: CategoryChip[];
   cuisines: CategoryChip[];
-  formats: CategoryChip[];
-  forms: CategoryChip[];
-  diets: CategoryChip[];
+  types: CategoryChip[];
 };
 
-export type Tab = "dishes" | "cuisines" | "formats" | "forms" | "diets";
+export type Tab = "dishes" | "cuisines" | "types";
 
 const TABS: readonly { id: Tab; label: string }[] = [
   { id: "dishes", label: "Блюда" },
   { id: "cuisines", label: "Кухни" },
-  { id: "formats", label: "Формат" },
-  { id: "forms", label: "Форма" },
-  { id: "diets", label: "Особенности" },
+  { id: "types", label: "Виды" },
 ];
 
 // Каким параметром фильтруется вкладка. Оси каталога бэкенд уже принимает
@@ -43,15 +39,23 @@ const TABS: readonly { id: Tab; label: string }[] = [
 export const TAB_PARAM: Record<Tab, string> = {
   dishes: "dish_type",
   cuisines: "cuisine",
-  formats: "format",
-  forms: "form",
-  diets: "diet",
+  types: "type",
 };
 export const CATEGORY_PARAMS = Object.values(TAB_PARAM);
 
+// Вкладка, где выбирают сколько угодно значений сразу: видов у позиции бывает
+// несколько (веганский фастфуд), а блюдо и кухня у неё одни.
+export const MULTI_TAB: Tab = "types";
+
+/** Что выбрано на вкладке. Виды лежат в адресе через запятую. */
+export function selectedValues(search: string, tabId: Tab): string[] {
+  const raw = new URLSearchParams(search).get(TAB_PARAM[tabId]) ?? "";
+  return raw.split(",").map((v) => v.trim()).filter(Boolean);
+}
+
 /**
  * Кнопка «Категория» на странице результатов. Открывает шторку с разделами
- * (Блюда / Кухни / Формат / Форма / Особенности) и сеткой категорий.
+ * (Блюда / Кухни / Виды) и сеткой категорий.
  *
  * Выбор кладёт в адрес настоящий фильтр, а не текстовый запрос: раньше сюда
  * писалось `q=Японская`, и поиск искал это слово в названиях — «Роллы»
@@ -64,14 +68,17 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
 
   const search = searchParams.toString();
 
-  // Ищем выбранную категорию среди всех групп → подпись кнопки и стартовая вкладка.
+  // Что выбрано → подпись кнопки, стартовая вкладка и подсветка чипов.
   const matched = useMemo(() => {
-    const params = new URLSearchParams(search);
     for (const tab of TABS) {
-      const current = params.get(TAB_PARAM[tab.id]);
-      if (!current) continue;
-      const hit = groups[tab.id].find((c) => c.value === current);
-      if (hit) return { tab: tab.id, label: hit.label, value: hit.value };
+      const values = selectedValues(search, tab.id);
+      if (!values.length) continue;
+      const chips = groups[tab.id].filter((c) => values.includes(c.value));
+      if (!chips.length) continue;
+      // Несколько видов не влезут в кнопку — показываем первый и «+N».
+      const label =
+        chips.length > 1 ? `${chips[0].label} +${chips.length - 1}` : chips[0].label;
+      return { tab: tab.id, label, values: chips.map((c) => c.value) };
     }
     return null;
   }, [groups, search]);
@@ -82,10 +89,20 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
   const applyCategory = useCallback(
     (chip: CategoryChip | null, tabId: Tab) => {
       const params = new URLSearchParams(searchParams.toString());
-      // Категория одна: выбирая кухню, снимаем ранее выбранную форму или тип блюда.
+      const isMulti = tabId === MULTI_TAB;
+      // На вкладке видов копим выбор, на остальных он один — прежний снимаем.
+      const current = isMulti ? selectedValues(params.toString(), tabId) : [];
+
       for (const name of CATEGORY_PARAMS) params.delete(name);
       params.delete("category_id"); // старый числовой параметр, если остался в адресе
-      if (chip) params.set(TAB_PARAM[tabId], chip.value);
+
+      const next = chip
+        ? current.includes(chip.value)
+          ? current.filter((v) => v !== chip.value) // повторный выбор снимает
+          : [...current, chip.value]
+        : [];
+      if (next.length) params.set(TAB_PARAM[tabId], next.join(","));
+
       const qs = params.toString();
       router.push(qs ? `${pathname}?${qs}` : pathname);
     },
@@ -99,11 +116,11 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
 
   const pickCategory = useCallback(
     (chip: CategoryChip) => {
-      setOpen(false);
-      // Повторный выбор текущей категории — снимаем её.
-      applyCategory(matched?.value === chip.value ? null : chip, tab);
+      // Виды выбирают пачкой, поэтому шторка остаётся открытой.
+      if (tab !== MULTI_TAB) setOpen(false);
+      applyCategory(chip, tab);
     },
-    [applyCategory, matched, tab]
+    [applyCategory, tab]
   );
 
   const activeList = groups[tab];
@@ -176,7 +193,7 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
 
             <div className="hide-scroll mt-4 grid max-h-[46vh] grid-cols-4 gap-x-2.5 gap-y-3.5 overflow-y-auto pb-1">
               {activeList.map((chip) => {
-                const isActive = matched?.value === chip.value;
+                const isActive = Boolean(matched?.values.includes(chip.value));
                 return (
                   <button
                     key={chip.id}
