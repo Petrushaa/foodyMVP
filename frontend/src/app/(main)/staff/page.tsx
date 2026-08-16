@@ -68,8 +68,26 @@ export default async function StaffPage() {
             ? `${parseFloat(p.will_create.menu_item.price).toFixed(0)} ₽`
             : null,
         restaurant: p.will_create?.restaurant?.name || p.menu_item?.restaurant?.name || "",
+        address:
+            p.will_create?.restaurant?.address || p.menu_item?.restaurant?.address || "",
+        city: p.will_create?.restaurant?.city || p.menu_item?.restaurant?.city || "",
+        restaurantPostsCount: p.will_create?.restaurant?.posts_count ?? 0,
         // Новое место модератор смотрит внимательнее всего.
         restaurantIsNew: Boolean(p.will_create?.restaurant?.is_new),
+        // Тип и категории решают, в какие фильтры попадёт позиция, — модератор
+        // должен видеть их до одобрения, а не узнавать по жалобам.
+        dishType: p.will_create?.menu_item?.dish_type || null,
+        taxons: (p.will_create?.menu_item?.taxons || []).map((t: any) => ({
+            id: t.id,
+            name: t.name,
+            emoji: t.emoji || null,
+            icon: fixMediaUrl(t.icon) || null,
+        })),
+        size: p.size || "",
+        similarMenuItems: (p.similar_menu_items ?? []).map((m: any) => ({
+            id: m.id,
+            name: m.name,
+        })),
         warnings: p.warnings ?? [],
         similarRestaurants: (p.similar_restaurants ?? []).map((r: any) => ({
             id: r.id,

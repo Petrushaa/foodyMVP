@@ -21,6 +21,7 @@ import {
     approvePostClient,
     rejectPostClient,
 } from "@/lib/moderation-client";
+import { PostDetailSheet } from "./PostDetailSheet";
 
 export interface PendingPost {
     id: number;
@@ -35,14 +36,37 @@ export interface PendingPost {
     description: string;
     price: string | null;
     restaurant: string;
+    address: string;
+    city: string;
+    /** Сколько постов уже у заведения — видно, насколько оно живое. */
+    restaurantPostsCount: number;
     /** Заведения ещё нет в каталоге — оно появится при одобрении. */
     restaurantIsNew: boolean;
+    /** Тип блюда и категории: по ним позиция попадёт в фильтры. */
+    dishType: string | null;
+    taxons: PostTaxon[];
+    /** Размер порции, как его указал автор. */
+    size: string;
+    /** Похожие позиции в этом же заведении — подсказка о дубле. */
+    similarMenuItems: SimilarMenuItem[];
     /** Почему пост помечен: дубль, бессмысленный ввод и прочее. */
     warnings: string[];
     /** Похожие заведения — к любому можно привязать вместо создания нового. */
     similarRestaurants: SimilarRestaurant[];
     tags: string[];
     rating: number;
+}
+
+export interface PostTaxon {
+    id: number;
+    name: string;
+    emoji: string | null;
+    icon: string | null;
+}
+
+export interface SimilarMenuItem {
+    id: number;
+    name: string;
 }
 
 export interface SimilarRestaurant {
@@ -64,7 +88,11 @@ export default function StaffPanel({
     const [rejectTarget, setRejectTarget] = useState<PendingPost | null>(null);
     const [rejectReason, setRejectReason] = useState("");
     const [errorByPost, setErrorByPost] = useState<Record<number, string>>({});
+    /** Открытый на разбор пост: решение принимается по нему целиком. */
+    const [detailId, setDetailId] = useState<number | null>(null);
     const [, startTransition] = useTransition();
+
+    const detail = posts.find((p) => p.id === detailId) ?? null;
 
     async function handleApprove(post: PendingPost, restaurantId?: number) {
         setPendingActionId(post.id);
@@ -91,6 +119,7 @@ export default function StaffPanel({
                 setErrorByPost((prev) => ({ ...prev, [post.id]: result.error! }));
                 return;
             }
+            setDetailId(null);
             startTransition(() => {
                 setPosts((prev) => prev.filter((p) => p.id !== post.id));
             });
@@ -122,6 +151,7 @@ export default function StaffPanel({
                 setErrorByPost((prev) => ({ ...prev, [target.id]: result.error! }));
                 return;
             }
+            setDetailId(null);
             startTransition(() => {
                 setPosts((prev) => prev.filter((p) => p.id !== target.id));
             });
@@ -165,7 +195,12 @@ export default function StaffPanel({
                         <li key={post.id}>
                             <GlassSurface className="rounded-[22px]">
                                 <article className="flex flex-col gap-3 p-4">
-                                    <div className="flex gap-3">
+                                    <button
+                                        type="button"
+                                        onClick={() => setDetailId(post.id)}
+                                        aria-label={`Разобрать пост «${post.title}»`}
+                                        className="flex gap-3 rounded-xl text-left outline-none focus-visible:ring-2 focus-visible:ring-[#1FA85C]/40"
+                                    >
                                         {post.image ? (
                                             <div className="relative size-20 shrink-0 overflow-hidden rounded-xl ring-1 ring-foreground/10">
                                                 <Image
@@ -219,7 +254,7 @@ export default function StaffPanel({
                                                 </p>
                                             )}
                                         </div>
-                                    </div>
+                                    </button>
 
                                     {post.description && (
                                         <p className="line-clamp-3 whitespace-pre-wrap break-words text-xs text-[#3A4A40]">
@@ -328,6 +363,20 @@ export default function StaffPanel({
                     );
                 })}
             </ul>
+
+            {detail && (
+                <PostDetailSheet
+                    post={detail}
+                    isPending={pendingActionId === detail.id}
+                    error={errorByPost[detail.id]}
+                    onApprove={handleApprove}
+                    onReject={(post) => {
+                        setRejectTarget(post);
+                        setRejectReason("");
+                    }}
+                    onClose={() => setDetailId(null)}
+                />
+            )}
 
             <AlertDialog
                 open={rejectTarget !== null}
