@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
 } from "react";
 import { createPortal } from "react-dom";
 
@@ -43,6 +44,11 @@ type PhotoViewerModalProps = {
   shouldReduceMotion: boolean | null;
   onClose: () => void;
   onChangeIndex: (nextIndex: number) => void;
+  /**
+   * Блок под фотографией — например, автор снимка и его отзыв.
+   * Нужен странице блюда: там кадр без автора мало что говорит.
+   */
+  footer?: ReactNode;
 };
 
 type ViewerArrowButtonProps = {
@@ -74,6 +80,7 @@ export function PhotoViewerModal({
   shouldReduceMotion,
   onClose,
   onChangeIndex,
+  footer,
 }: PhotoViewerModalProps) {
   const lastIndex = post.photos - 1;
   const safeActiveIndex = Math.min(Math.max(activeIndex, 0), lastIndex);
@@ -458,6 +465,15 @@ export function PhotoViewerModal({
           >
             <X className="size-5 max-[430px]:size-4.5" strokeWidth={2.45} />
           </motion.button>
+
+          {footer && (
+            <div
+              className="z-20 mt-3 w-full max-w-[560px] px-3"
+              onClick={(event) => event.stopPropagation()}
+            >
+              {footer}
+            </div>
+          )}
 
           {hasMultiplePhotos && (
             <div className="pointer-events-none z-20 mt-4 flex gap-1.5 rounded-full border border-white/25 bg-white/[0.1] p-1.5 shadow-[0_8px_24px_rgba(0,0,0,0.18)]">

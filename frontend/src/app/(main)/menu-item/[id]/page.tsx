@@ -209,24 +209,13 @@ export default async function MenuItemPage({
 
         <div className="px-4 pt-4">
           {/* ─── Цена и переход к своему отзыву ─── */}
-          <GlassSurface
-            className="rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10)]"
-            contentClassName="flex items-center justify-between gap-3"
-          >
-            <div className="min-w-0">
-              <div className="text-[24px] leading-none font-extrabold tracking-[-0.4px] text-[#15291C]">
-                {price ?? "—"}
-              </div>
-              <div className="mt-1 text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
-                {priceDate ? `Цена подтверждена ${priceDate}` : "Цену ещё не подтверждали"}
-              </div>
+          <GlassSurface className="rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10)]">
+            <div className="text-[24px] leading-none font-extrabold tracking-[-0.4px] text-[#15291C]">
+              {price ?? "—"}
             </div>
-            <Link
-              href="/create"
-              className="shrink-0 rounded-full bg-[#2ECC71] px-4 py-2.5 text-[14px] font-extrabold text-white shadow-[0_8px_20px_rgba(46,204,113,0.35)]"
-            >
-              Я тут ел
-            </Link>
+            <div className="mt-1 text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
+              {priceDate ? `Цена подтверждена ${priceDate}` : "Цену ещё не подтверждали"}
+            </div>
           </GlassSurface>
 
           {types.length > 0 && (
@@ -265,7 +254,7 @@ export default async function MenuItemPage({
                   {shots.length}
                 </span>
               </h2>
-              <GuestPhotos shots={shots} />
+              <GuestPhotos shots={shots} dishName={item.name} />
             </section>
           )}
 
