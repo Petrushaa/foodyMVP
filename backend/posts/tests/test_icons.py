@@ -200,3 +200,54 @@ class TestMissingReport:
 
         out = capsys.readouterr().out
         assert f'{burger.name}.png' not in out, 'загруженное больше не просят'
+
+
+@pytest.mark.django_db
+class TestPrepareIcons:
+    """
+    Подготовка иконок из исходников: уменьшение и раскладка по ключам справочника.
+    Исходники — фотографии на мегабайты, в интерфейсе значок в несколько десятков
+    пикселей, поэтому уменьшение обязательная часть флоу, а не украшение.
+    """
+
+    @pytest.fixture
+    def source_dir(self, tmp_path):
+        from PIL import Image
+
+        folder = tmp_path / 'source'
+        folder.mkdir()
+        Image.new('RGB', (2048, 2048), 'white').save(folder / 'Бургер.jpeg')
+        return folder
+
+    def test_resizes_and_renames(self, source_dir, tmp_path, burger):
+        target = tmp_path / 'out'
+
+        call_command('prepare_icons', source=str(source_dir), target=str(target))
+
+        from PIL import Image
+        result = target / 'dish-types' / f'{burger.name}.webp'
+        assert result.exists(), 'кладём под ключом справочника'
+        assert max(Image.open(result).size) == 256
+        assert result.stat().st_size < 100 * 1024, 'мегабайты до интерфейса не доезжают'
+
+    def test_unknown_name_is_reported_not_written(self, tmp_path, capsys):
+        from PIL import Image
+
+        folder = tmp_path / 'src'
+        folder.mkdir()
+        Image.new('RGB', (64, 64), 'white').save(folder / 'Цезарь.png')
+        target = tmp_path / 'out'
+
+        call_command('prepare_icons', source=str(folder), target=str(target))
+
+        out = capsys.readouterr().out
+        assert 'Цезарь' in out and 'не найдено' in out
+        assert not (target / 'dish-types' / 'Цезарь.webp').exists()
+
+    def test_dry_run_writes_nothing(self, source_dir, tmp_path):
+        target = tmp_path / 'out'
+
+        call_command('prepare_icons', source=str(source_dir), target=str(target),
+                     dry_run=True)
+
+        assert not target.exists()
