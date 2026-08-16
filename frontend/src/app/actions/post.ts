@@ -2,7 +2,7 @@
 
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
-import { apiRequest, mapDjangoPostToDish } from "@/lib/api";
+import { apiRequest } from "@/lib/api";
 
 
 export async function createPost(formData: FormData) {
@@ -92,7 +92,7 @@ export async function createPost(formData: FormData) {
         });
 
         revalidatePath("/");
-        revalidatePath("/profile");
+        revalidatePath("/me");
         return { success: true };
     } catch (error: any) {
         console.error("Create post error:", error);
@@ -114,7 +114,7 @@ export async function deletePost(postId: string) {
             }
         });
 
-        revalidatePath("/profile");
+        revalidatePath("/me");
         revalidatePath("/");
         return { success: true };
     } catch (error: any) {

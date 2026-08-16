@@ -81,22 +81,29 @@ export function fixAvatarUrl(
     return url.includes("?") ? `${url}&v=${v}` : `${url}?v=${v}`;
 }
 
+/**
+ * Пост из API в форму, которую ждут плитки профиля.
+ *
+ * Названия, цена и заведение живут у позиции (`menu_item`), а не в самом посте:
+ * до одобрения модератором позиции нет, поэтому у неодобренного поста их
+ * не будет — отсюда запасные значения.
+ */
 export function mapDjangoPostToDish(post: any): Dish {
     const stats = post.statistics || {};
-    // Fallback to stats.rating if user_rating isn't provided or is 0.
-    // Бэкенд хранит оценку 0–10 (createPost умножает звёзды ×2) — делим на 2 для показа в 0–5.
-    const userRating = (post.user_rating || stats.rating || 0) / 2;
+    const item = post.menu_item ?? null;
+    // Оценка автора хранится по десятибалльной шкале, показываем по пятибалльной.
+    const userRating = (post.author_rating || 0) / 2;
 
     return {
         id: post.id.toString(),
         type: "user_post",
-        title: post.dish_name || "Без названия",
+        title: item?.name || post.draft_menu_item_name || "Без названия",
         description: post.description || "",
         imageUrl: fixMediaUrl(post.images?.[0]?.image) || "/placeholder.png",
         images: post.images?.map((img: any) => fixMediaUrl(img.image)).filter(Boolean) || [],
         userRating: parseFloat(Number(userRating).toFixed(1)),
         matchScore: 0,
-        price: post.price ? parseFloat(post.price) : undefined,
+        price: item?.price ? parseFloat(item.price) : undefined,
         author: {
             id: post.user?.id?.toString() || "unknown",
             name: post.user?.full_name || post.user?.username || "Аноним",
@@ -106,10 +113,10 @@ export function mapDjangoPostToDish(post: any): Dish {
             bio: post.user?.bio,
         },
         restaurant: {
-            id: (post.restaurant && post.restaurant !== 'unknown') ? (typeof post.restaurant === 'object' ? post.restaurant.id?.toString() : post.restaurant.toString()) : undefined,
-            name: post.restaurant_name || "Неизвестно",
+            id: item?.restaurant?.id?.toString(),
+            name: item?.restaurant?.name || "Неизвестно",
             location: { lat: 0, lng: 0 },
-            address: post.restaurant_address || "",
+            address: item?.restaurant?.address || "",
         },
         stats: {
             likes: stats.likes_count || 0,

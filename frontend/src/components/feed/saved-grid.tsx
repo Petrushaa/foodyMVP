@@ -7,7 +7,8 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { DishPhoto } from "@/components/feed/dish-photo";
 import { FullScreenPost } from "@/components/feed/full-screen-post";
 import { AspectRatio } from "@/components/ui/aspect-ratio";
-import { toggleLike, toggleSave, toggleFollow } from "@/lib/feed-client";
+import { toggleLike, toggleSave } from "@/lib/feed-client";
+import { useFollowState } from "@/components/feed/use-follow-state";
 import type { Post, PostComment } from "@/lib/mock-data";
 import { DEFAULT_TWEAKS } from "@/lib/tweaks";
 import { cn } from "@/lib/utils";
@@ -84,29 +85,25 @@ export function SavedGrid({
   const [posts, setPosts] = useState<Post[]>(initialPosts);
   const [likedSet, setLikedSet] = useState<Set<number>>(() => new Set(likedIds));
   const [savedSet, setSavedSet] = useState<Set<number>>(() => new Set(savedIds));
-  const [followingSet, setFollowingSet] = useState<Set<string>>(
-    () => new Set(initialFollowingUsers)
-  );
-
-  const [pendingFollows, setPendingFollows] = useState<Set<string>>(() => new Set());
-
-  // Сервер — источник правды: после router.refresh() или возврата на страницу
-  // приходит свежий список подписок. Без сверки набор оставался таким, каким
-  // был при первом рендере, и кнопка могла разойтись с сервером.
-  //
-  // Пока запрос в полёте, сверку пропускаем: перерисовка страницы могла быть
-  // посчитана до него, и свежее нажатие откатилось бы обратно.
-  const followingKey = initialFollowingUsers.join(",");
-  useEffect(() => {
-    if (pendingFollows.size > 0) return;
-    setFollowingSet(new Set(initialFollowingUsers));
-    // Зависимость — followingKey, а не сам массив: он каждый рендер новый.
-  }, [followingKey]);
   const [pendingLikes, setPendingLikes] = useState<Set<number>>(() => new Set());
   const [pendingSaves, setPendingSaves] = useState<Set<number>>(() => new Set());
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [activeComments, setActiveComments] = useState<PostComment[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const follow = useFollowState({
+    initialFollowingUsers,
+    canAct: Boolean(currentUser && accessToken),
+    // Автор может быть только у открытого поста: в сетке карточек нет.
+    resolveUserId: useCallback(
+      (author: string) =>
+        (posts.find((p) => p.user === author) ??
+          (activePost?.user === author ? activePost : null))?.userId,
+      [activePost, posts],
+    ),
+    onDenied: useCallback(() => setNotice("Войдите, чтобы подписаться."), []),
+    onError: setNotice,
+  });
 
   useEffect(() => {
     if (notice) {
@@ -187,43 +184,6 @@ export function SavedGrid({
     [accessToken, activePost, currentUser, pendingSaves]
   );
 
-  const onFollowToggle = useCallback(
-    async (author: string, nextFollowing: boolean) => {
-      if (!currentUser || !accessToken) {
-        setNotice("Войдите, чтобы подписаться.");
-        return;
-      }
-      if (pendingFollows.has(author)) return;
-      const target =
-        posts.find((p) => p.user === author) ??
-        (activePost?.user === author ? activePost : null);
-      const targetUserId = target?.userId;
-      if (!targetUserId) {
-        setNotice("Не удалось определить пользователя для подписки.");
-        return;
-      }
-      setPendingFollows((s) => new Set(s).add(author));
-      try {
-        await toggleFollow(author, targetUserId, accessToken, nextFollowing);
-        setFollowingSet((s) => {
-          const next = new Set(s);
-          if (nextFollowing) next.add(author);
-          else next.delete(author);
-          return next;
-        });
-      } catch {
-        setNotice("Не удалось обновить подписку.");
-      } finally {
-        setPendingFollows((s) => {
-          const next = new Set(s);
-          next.delete(author);
-          return next;
-        });
-      }
-    },
-    [accessToken, activePost, currentUser, pendingFollows, posts]
-  );
-
   const likedSnapshot = useMemo(() => likedSet, [likedSet]);
   const savedSnapshot = useMemo(() => savedSet, [savedSet]);
 
@@ -268,14 +228,14 @@ export function SavedGrid({
               currentUser={currentUser}
               density={TWEAKS.density}
               comments={activeComments}
-              isAuthorFollowed={followingSet.has(activePost.user)}
-              isFollowPending={pendingFollows.has(activePost.user)}
+              isAuthorFollowed={follow.isFollowing(activePost.user)}
+              isFollowPending={follow.isPending(activePost.user)}
               isLiked={likedSnapshot.has(activePost.id)}
               isLikePending={pendingLikes.has(activePost.id)}
               isSaved={savedSnapshot.has(activePost.id)}
               isSavePending={pendingSaves.has(activePost.id)}
               onClose={() => setActivePost(null)}
-              onFollowToggle={onFollowToggle}
+              onFollowToggle={follow.toggle}
               onLikeToggle={onLikeToggle}
               onSaveToggle={onSaveToggle}
             />

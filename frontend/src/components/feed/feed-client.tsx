@@ -17,7 +17,8 @@ import { PostCard } from "@/components/feed/post-card";
 import { mapApiPostToFeedPost, type ApiPost } from "@/lib/feed-adapter";
 import type { Post } from "@/lib/mock-data";
 import { DEFAULT_TWEAKS } from "@/lib/tweaks";
-import { toggleLike, toggleSave, toggleFollow } from "@/lib/feed-client";
+import { toggleLike, toggleSave } from "@/lib/feed-client";
+import { useFollowState } from "@/components/feed/use-follow-state";
 
 const TWEAKS = DEFAULT_TWEAKS;
 
@@ -88,25 +89,21 @@ export function FeedClient({
   const [savedSet, setSavedSet] = useState<Set<number>>(() => new Set(savedIds));
   const [pendingLikes, setPendingLikes] = useState<Set<number>>(() => new Set());
   const [pendingSaves, setPendingSaves] = useState<Set<number>>(() => new Set());
-  const [followingSet, setFollowingSet] = useState<Set<string>>(
-    () => new Set(initialFollowingUsers),
-  );
-
-  const [pendingFollows, setPendingFollows] = useState<Set<string>>(() => new Set());
-
-  // Сервер — источник правды: после router.refresh() или возврата на страницу
-  // приходит свежий список подписок. Без сверки набор оставался таким, каким
-  // был при первом рендере, и кнопка могла разойтись с сервером.
-  //
-  // Пока запрос в полёте, сверку пропускаем: перерисовка страницы могла быть
-  // посчитана до него, и свежее нажатие откатилось бы обратно.
-  const followingKey = initialFollowingUsers.join(",");
-  useEffect(() => {
-    if (pendingFollows.size > 0) return;
-    setFollowingSet(new Set(initialFollowingUsers));
-    // Зависимость — followingKey, а не сам массив: он каждый рендер новый.
-  }, [followingKey]);
   const [notice, setNotice] = useState<string | null>(null);
+
+  const follow = useFollowState({
+    initialFollowingUsers,
+    canAct: Boolean(currentUser && accessToken),
+    resolveUserId: useCallback(
+      (author: string) => posts.find((p) => p.user === author)?.userId,
+      [posts],
+    ),
+    onDenied: useCallback(() => {
+      // Гостю кнопка ведёт на вход, а не молча ничего не делает.
+      router.push(`/login?callbackUrl=${encodeURIComponent("/")}`);
+    }, [router]),
+    onError: setNotice,
+  });
 
   // R4-B2: загрузка следующей страницы. Один in-flight запрос за раз,
   // дедуп по id (на случай если бэк вернёт пересекающиеся результаты).
@@ -269,43 +266,6 @@ export function FeedClient({
     [accessToken, currentUser, pendingSaves, router],
   );
 
-  const onFollowToggle = useCallback(
-    async (author: string, nextFollowing: boolean) => {
-      if (!currentUser || !accessToken) {
-        // R4-B4: неавторизованный клик по «Подписаться» → редирект на логин,
-        // как в R7-fix. Кнопка только что отрендерилась рядом с handle.
-        router.push(`/login?callbackUrl=${encodeURIComponent("/")}`);
-        return;
-      }
-      if (pendingFollows.has(author)) return;
-      const target = posts.find((p) => p.user === author);
-      const targetUserId = target?.userId;
-      if (!targetUserId) {
-        setNotice("Не удалось определить пользователя для подписки.");
-        return;
-      }
-      setPendingFollows((s) => new Set(s).add(author));
-      try {
-        await toggleFollow(author, targetUserId, accessToken, nextFollowing);
-        setFollowingSet((s) => {
-          const next = new Set(s);
-          if (nextFollowing) next.add(author);
-          else next.delete(author);
-          return next;
-        });
-      } catch {
-        setNotice("Не удалось обновить подписку.");
-      } finally {
-        setPendingFollows((s) => {
-          const next = new Set(s);
-          next.delete(author);
-          return next;
-        });
-      }
-    },
-    [accessToken, currentUser, pendingFollows, posts, router],
-  );
-
   const likedSnapshot = useMemo(() => likedSet, [likedSet]);
   const savedSnapshot = useMemo(() => savedSet, [savedSet]);
 
@@ -336,13 +296,13 @@ export function FeedClient({
                   brand={TWEAKS.brand}
                   density={TWEAKS.density}
                   currentUser={currentUser}
-                  isAuthorFollowed={followingSet.has(post.user)}
-                  isFollowPending={pendingFollows.has(post.user)}
+                  isAuthorFollowed={follow.isFollowing(post.user)}
+                  isFollowPending={follow.isPending(post.user)}
                   isLiked={likedSnapshot.has(post.id)}
                   isLikePending={pendingLikes.has(post.id)}
                   isSaved={savedSnapshot.has(post.id)}
                   isSavePending={pendingSaves.has(post.id)}
-                  onFollowToggle={onFollowToggle}
+                  onFollowToggle={follow.toggle}
                   onLikeToggle={onLikeToggle}
                   onSaveToggle={onSaveToggle}
                 />
