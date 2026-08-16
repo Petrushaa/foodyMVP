@@ -26,7 +26,7 @@ export async function toggleFollow(userId: string | number, isFollowing: boolean
         });
         
         revalidatePath(`/users/${userId}`);
-        revalidatePath('/profile');
+        revalidatePath('/me');
         return { success: true };
     } catch (e: any) {
         return { error: e.message };

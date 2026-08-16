@@ -12,6 +12,12 @@ export default function SubscribeButton({ userId, initialIsFollowing, session }:
 
     const router = useRouter();
 
+    // После router.refresh() страница приходит с новыми данными. Без этого
+    // кнопка осталась бы на своём прежнем состоянии и разошлась бы с сервером.
+    useEffect(() => {
+        setIsFollowing(initialIsFollowing);
+    }, [initialIsFollowing]);
+
     useEffect(() => {
         if (notice) {
             const id = setTimeout(() => setNotice(null), 3000);
@@ -24,19 +30,33 @@ export default function SubscribeButton({ userId, initialIsFollowing, session }:
             setNotice("Войдите, чтобы подписаться.");
             return;
         }
+        if (loading) return;
 
-        const newIsFollowing = !isFollowing;
-        setIsFollowing(newIsFollowing); // Optimistic UI update
+        const wasFollowing = isFollowing;
+        setIsFollowing(!wasFollowing); // Оптимистично, до ответа сервера.
         setLoading(true);
 
-        const res = await toggleFollow(userId, isFollowing);
-        if (res?.error) {
-            setIsFollowing(!newIsFollowing); // Revert on error
-            console.error("Failed to toggle subscription:", res.error);
-        } else {
-            router.refresh(); // Refresh page data to show new follower count
+        try {
+            const res = await toggleFollow(userId, wasFollowing);
+
+            if (res?.error) {
+                setIsFollowing(wasFollowing);
+                setNotice(wasFollowing ? "Не удалось отписаться" : "Не удалось подписаться");
+                return;
+            }
+
+            router.refresh(); // Обновить счётчик подписчиков.
+        } catch {
+            // Действие упало — возвращаем кнопку в прежнее состояние и говорим
+            // об этом. Молча оставлять оптимистичный вид нельзя: человек решит,
+            // что подписался.
+            setIsFollowing(wasFollowing);
+            setNotice("Не удалось изменить подписку");
+        } finally {
+            // Именно finally: без него любая ошибка оставляла кнопку
+            // заблокированной навсегда, и она выглядела зависшей.
+            setLoading(false);
         }
-        setLoading(false);
     };
 
     return (
