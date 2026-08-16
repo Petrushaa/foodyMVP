@@ -159,7 +159,7 @@ export default async function MenuItemPage({
           </div>
         </div>
 
-        <div className="flex flex-col gap-5 px-4 pt-5">
+        <div className="flex flex-col gap-5 pt-5">
           {/* ─── Цена и переход к своему отзыву ─── */}
           <GlassSurface className="rounded-[22px] border border-white/65 bg-white/45 px-4 py-3 shadow-[0_8px_24px_rgba(20,40,28,0.10)]">
             <div className="text-[24px] leading-none font-extrabold tracking-[-0.4px] text-[#15291C]">
@@ -171,7 +171,7 @@ export default async function MenuItemPage({
           </GlassSurface>
 
           {types.length > 0 && (
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-2 px-4">
               {types.map((t: any) => (
                 <span
                   key={t.id}
@@ -185,7 +185,7 @@ export default async function MenuItemPage({
           )}
 
           {item.brand_rating && (
-            <p className="text-[12.5px] font-medium text-[#5C6B62]">
+            <p className="px-4 text-[12.5px] font-medium text-[#5C6B62]">
               По сети: {(item.brand_rating.rating_raw / 2).toFixed(1)} из 5 ·{" "}
               {item.brand_rating.restaurants_count}{" "}
               {plural(
@@ -200,7 +200,7 @@ export default async function MenuItemPage({
           {/* ─── Снимки гостей с куском отзыва ─── */}
           {shots.length > 0 && (
             <section>
-              <h2 className="mb-2.5 flex items-baseline gap-2 px-1 text-[16px] font-extrabold tracking-[-0.2px] text-[#15291C]">
+              <h2 className="mb-2.5 flex items-baseline gap-2 px-4 text-[16px] font-extrabold tracking-[-0.2px] text-[#15291C]">
                 Фотографии гостей
                 <span className="text-[13px] font-bold text-[#8A958E] tabular-nums">
                   {shots.length}
@@ -212,7 +212,7 @@ export default async function MenuItemPage({
 
           {/* ─── Отзывы ─── */}
           <section>
-            <h2 className="mb-2.5 px-1 text-[16px] font-extrabold tracking-[-0.2px] text-[#15291C]">
+            <h2 className="mb-2.5 px-4 text-[16px] font-extrabold tracking-[-0.2px] text-[#15291C]">
               Отзывы
               {item.ratings_count > 0 && (
                 <span className="ml-1.5 text-[13px] font-bold text-[#8A958E]">
