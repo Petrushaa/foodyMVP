@@ -76,10 +76,13 @@ class PlaceSuggestView(APIView):
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request):
-        found = search_restaurants(
-            request.query_params.get('text', ''),
-            city=request.query_params.get('city', ''),
-        )
+        # Город по умолчанию — свой: лента и так разделена по городам, и место
+        # из другого города подсказывать незачем.
+        city = request.query_params.get('city')
+        if city is None:
+            city = request.user.city or ''
+
+        found = search_restaurants(request.query_params.get('text', ''), city=city)
         return Response([
             {
                 'id': restaurant.id,

@@ -283,3 +283,41 @@ class TestDuplicateAtSameAddress:
     def test_other_city_is_never_a_duplicate(self, restaurant):
         found = find_possible_duplicates('Кофемания', 'ул. Пушкина, д. 10', 'Казань')
         assert list(found) == []
+
+
+@pytest.mark.django_db
+class TestPlaceSuggest:
+    """
+    Подсказки заведений при вводе названия — главная защита от дублей:
+    человек видит, что место уже заведено, и выбирает его.
+    """
+
+    URL = '/api/v1/places/suggest/'
+
+    def test_finds_by_typo(self, api_client, author, restaurant):
+        api_client.force_authenticate(author)
+
+        response = api_client.get(f'{self.URL}?text=кофеания')
+
+        assert response.status_code == 200
+        assert [p['name'] for p in response.data] == ['Кофемания']
+
+    def test_carries_address_for_the_second_field(self, api_client, author, restaurant):
+        """Выбрав название, человек получает и адрес — вводить его заново незачем."""
+        api_client.force_authenticate(author)
+
+        found = api_client.get(f'{self.URL}?text=кофемания').data[0]
+
+        assert found['address'] == restaurant.address
+        assert found['id'] == restaurant.id
+
+    def test_defaults_to_own_city(self, api_client, author, restaurant):
+        """Место из чужого города подсказывать незачем — ленты всё равно разные."""
+        author.city = 'Казань'
+        author.save(update_fields=['city'])
+        api_client.force_authenticate(author)
+
+        assert api_client.get(f'{self.URL}?text=кофемания').data == []
+
+    def test_guest_is_not_served(self, api_client):
+        assert api_client.get(f'{self.URL}?text=кофемания').status_code in (401, 403)

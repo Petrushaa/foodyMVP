@@ -57,6 +57,7 @@ import {
   getReviewChromeStyle,
 } from "@/components/review/review-screen-shell";
 import { createPost } from "@/app/actions/post";
+import { usePlaceSuggestions } from "@/components/review/use-place-suggestions";
 
 const MAX_REVIEW_LENGTH = 2000;
 const MAX_TAGS = 3;
@@ -626,6 +627,29 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
   const [price, setPrice] = useState("");
   const [place, setPlace] = useState("");
   const [address, setAddress] = useState("");
+  // Заведение, выбранное из подсказок. Пока оно выбрано, пост привяжется
+  // к нему по id — тогда дубль не появится даже при опечатке в названии.
+  const [placeId, setPlaceId] = useState<number | null>(null);
+  const [placeFocused, setPlaceFocused] = useState(false);
+  const [addressFocused, setAddressFocused] = useState(false);
+  const suggestions = usePlaceSuggestions(place);
+  // Список прячем, когда место уже выбрано: подсказывать нечего.
+  const showPlaceSuggestions =
+    placeFocused && placeId === null && suggestions.length > 0;
+  // Адрес подсказываем из найденных мест: человек уже ввёл название, и вводить
+  // адрес того же заведения заново незачем.
+  const addressHints = suggestions
+    .map((s) => s.address)
+    .filter((value, index, all) => value && all.indexOf(value) === index);
+  const showAddressHints =
+    addressFocused && address.trim().length === 0 && addressHints.length > 0;
+
+  function pickPlace(suggestion: (typeof suggestions)[number]) {
+    setPlace(suggestion.name);
+    setAddress(suggestion.address);
+    setPlaceId(suggestion.id);
+    setPlaceFocused(false);
+  }
   const [rating, setRating] = useState(0);
   const [photos, setPhotos] = useState<File[]>([]);
   const [review, setReview] = useState("");
@@ -747,6 +771,9 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
     if (price.trim()) fd.append("price", price.trim());
     fd.append("restaurantName", place.trim());
     if (address.trim()) fd.append("restaurantAddress", address.trim());
+    // Место выбрано из подсказок — отправляем его id. Тогда пост привяжется
+    // к существующему заведению, и опечатка в названии дубля не создаст.
+    if (placeId !== null) fd.append("restaurantId", String(placeId));
     if (category) fd.append("category", category.label);
     tags.forEach((t) => fd.append("tags", t));
     photos.forEach((file) => fd.append("image", file));
@@ -896,15 +923,26 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
                     <Input
                       aria-label="Название заведения"
                       value={place}
-                      onChange={(event) => setPlace(event.target.value)}
+                      onChange={(event) => {
+                        setPlace(event.target.value);
+                        // Правка названия отменяет привязку: человек вводит уже
+                        // другое место, а не то, что выбрал из списка.
+                        setPlaceId(null);
+                      }}
+                      onFocus={() => setPlaceFocused(true)}
+                      onBlur={() => setPlaceFocused(false)}
                       placeholder="Название заведения"
+                      autoComplete="off"
                       className={cn(FIELD_INPUT_CLASSES, "min-w-0 flex-1 pr-0")}
                     />
                     {place && (
                       <button
                         type="button"
                         aria-label="Очистить"
-                        onClick={() => setPlace("")}
+                        onClick={() => {
+                          setPlace("");
+                          setPlaceId(null);
+                        }}
                         className={cn(
                           "grid size-[22px] shrink-0 cursor-pointer place-items-center rounded-full border-0 bg-[rgba(20,40,28,0.08)] p-0 text-[#3A4A40] opacity-0 transition-opacity group-focus-within:opacity-100",
                           PRESS_CLASSES
@@ -915,6 +953,35 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
                     )}
                   </div>
                 </GlassSurface>
+
+                {showPlaceSuggestions && (
+                  <ul className="max-h-52 overflow-y-auto rounded-[16px] border border-white/65 bg-white/85 py-1 shadow-[0_12px_30px_rgba(20,40,28,0.16)] backdrop-blur-[16px]">
+                    {suggestions.map((suggestion) => (
+                      <li key={suggestion.id}>
+                        <button
+                          type="button"
+                          // onMouseDown раньше onBlur поля — иначе выбор терялся.
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            pickPlace(suggestion);
+                          }}
+                          className="flex w-full cursor-pointer flex-col items-start px-4 py-2 text-left hover:bg-white/70"
+                        >
+                          <span className="text-[14.5px] font-bold text-[#15291C]">
+                            {suggestion.name}
+                          </span>
+                          <span className="text-[12px] font-medium text-[#5C6B62]">
+                            {suggestion.address}
+                            {suggestion.postsCount > 0
+                              ? ` · ${suggestion.postsCount} постов`
+                              : " · новое"}
+                          </span>
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+
                 <GlassSurface
                   className={FIELD_SURFACE_CLASSES}
                   contentClassName="h-full"
@@ -927,7 +994,10 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
                       aria-label="Адрес заведения"
                       value={address}
                       onChange={(event) => setAddress(event.target.value)}
+                      onFocus={() => setAddressFocused(true)}
+                      onBlur={() => setAddressFocused(false)}
                       placeholder="Адрес (необязательно)"
+                      autoComplete="off"
                       className={cn(FIELD_INPUT_CLASSES, "min-w-0 flex-1 pr-0")}
                     />
                     {address && (
@@ -945,6 +1015,26 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
                     )}
                   </div>
                 </GlassSurface>
+
+                {showAddressHints && (
+                  <ul className="rounded-[16px] border border-white/65 bg-white/85 py-1 shadow-[0_12px_30px_rgba(20,40,28,0.16)] backdrop-blur-[16px]">
+                    {addressHints.map((hint) => (
+                      <li key={hint}>
+                        <button
+                          type="button"
+                          onMouseDown={(event) => {
+                            event.preventDefault();
+                            setAddress(hint);
+                            setAddressFocused(false);
+                          }}
+                          className="flex w-full cursor-pointer items-center px-4 py-2 text-left text-[14px] font-semibold text-[#15291C] hover:bg-white/70"
+                        >
+                          {hint}
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             </section>
 

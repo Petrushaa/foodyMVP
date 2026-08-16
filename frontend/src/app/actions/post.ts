@@ -33,17 +33,26 @@ export async function createPost(formData: FormData) {
         newFormData.append("price", priceValue.toFixed(2));
     }
 
-    const restName = (formData.get("restaurantName") as string)?.trim();
-    if (!restName) {
-        return { error: "Укажите название заведения" };
+    // Заведение выбрано из подсказок: id избавляет от разбора написаний —
+    // ни название, ни адрес, ни город сервер сверять уже не должен.
+    const restaurantId = (formData.get("restaurantId") as string)?.trim();
+    if (restaurantId) {
+        newFormData.append("restaurant_id", restaurantId);
     }
-    newFormData.append("restaurant_name", restName);
 
-    const restAddress = (formData.get("restaurantAddress") as string)?.trim();
-    if (!restAddress) {
-        return { error: "Укажите адрес заведения — без него его не отличить от тёзки" };
+    const restName = (formData.get("restaurantName") as string)?.trim();
+    if (!restaurantId) {
+        if (!restName) {
+            return { error: "Укажите название заведения" };
+        }
+        newFormData.append("restaurant_name", restName);
+
+        const restAddress = (formData.get("restaurantAddress") as string)?.trim();
+        if (!restAddress) {
+            return { error: "Укажите адрес заведения — без него его не отличить от тёзки" };
+        }
+        newFormData.append("restaurant_address", restAddress);
     }
-    newFormData.append("restaurant_address", restAddress);
 
     // Город берём из профиля: в форме его нет, а уникальность заведения
     // считается по тройке «город + название + адрес».
