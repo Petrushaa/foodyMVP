@@ -87,9 +87,23 @@ export function SavedGrid({
   const [followingSet, setFollowingSet] = useState<Set<string>>(
     () => new Set(initialFollowingUsers)
   );
+
+  const [pendingFollows, setPendingFollows] = useState<Set<string>>(() => new Set());
+
+  // Сервер — источник правды: после router.refresh() или возврата на страницу
+  // приходит свежий список подписок. Без сверки набор оставался таким, каким
+  // был при первом рендере, и кнопка могла разойтись с сервером.
+  //
+  // Пока запрос в полёте, сверку пропускаем: перерисовка страницы могла быть
+  // посчитана до него, и свежее нажатие откатилось бы обратно.
+  const followingKey = initialFollowingUsers.join(",");
+  useEffect(() => {
+    if (pendingFollows.size > 0) return;
+    setFollowingSet(new Set(initialFollowingUsers));
+    // Зависимость — followingKey, а не сам массив: он каждый рендер новый.
+  }, [followingKey]);
   const [pendingLikes, setPendingLikes] = useState<Set<number>>(() => new Set());
   const [pendingSaves, setPendingSaves] = useState<Set<number>>(() => new Set());
-  const [pendingFollows, setPendingFollows] = useState<Set<string>>(() => new Set());
   const [activePost, setActivePost] = useState<Post | null>(null);
   const [activeComments, setActiveComments] = useState<PostComment[]>([]);
   const [notice, setNotice] = useState<string | null>(null);
