@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import Image from "next/image";
-import { Check, X, MapPin, Star, Loader2 } from "lucide-react";
+import { AlertTriangle, Check, X, MapPin, Star, Loader2 } from "lucide-react";
 
 import { GlassSurface } from "@/components/feed/glass-surface";
 import { Button } from "@/components/ui/button";
@@ -35,8 +35,21 @@ export interface PendingPost {
     description: string;
     price: string | null;
     restaurant: string;
+    /** Заведения ещё нет в каталоге — оно появится при одобрении. */
+    restaurantIsNew: boolean;
+    /** Почему пост помечен: дубль, бессмысленный ввод и прочее. */
+    warnings: string[];
+    /** Похожие заведения — к любому можно привязать вместо создания нового. */
+    similarRestaurants: SimilarRestaurant[];
     tags: string[];
     rating: number;
+}
+
+export interface SimilarRestaurant {
+    id: number;
+    name: string;
+    address: string;
+    postsCount: number;
 }
 
 export default function StaffPanel({
@@ -53,7 +66,7 @@ export default function StaffPanel({
     const [errorByPost, setErrorByPost] = useState<Record<number, string>>({});
     const [, startTransition] = useTransition();
 
-    async function handleApprove(post: PendingPost) {
+    async function handleApprove(post: PendingPost, restaurantId?: number) {
         setPendingActionId(post.id);
         setErrorByPost((prev) => {
             const next = { ...prev };
@@ -73,7 +86,7 @@ export default function StaffPanel({
                 }));
                 return;
             }
-            const result = await approvePostClient(post.id, accessToken);
+            const result = await approvePostClient(post.id, accessToken, restaurantId);
             if ("error" in result && result.error) {
                 setErrorByPost((prev) => ({ ...prev, [post.id]: result.error! }));
                 return;
@@ -223,6 +236,56 @@ export default function StaffPanel({
                                                 >
                                                     #{t}
                                                 </span>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {post.warnings.length > 0 && (
+                                        <div className="rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-200">
+                                            {post.warnings.map((warning) => (
+                                                <p
+                                                    key={warning}
+                                                    className="flex items-start gap-1.5 text-xs font-medium text-amber-900"
+                                                >
+                                                    <AlertTriangle className="mt-0.5 size-3 shrink-0" />
+                                                    {warning}
+                                                </p>
+                                            ))}
+                                        </div>
+                                    )}
+
+                                    {/* Похожие места. Одобрение без выбора заведёт новое
+                                        заведение — так и появлялись «Ролльная» с «Рольной»
+                                        по одному адресу. */}
+                                    {post.restaurantIsNew && post.similarRestaurants.length > 0 && (
+                                        <div className="flex flex-col gap-1.5 rounded-xl bg-white/60 px-3 py-2.5 ring-1 ring-foreground/10">
+                                            <p className="text-[11px] font-bold tracking-wide text-[#5C6B62] uppercase">
+                                                Это то же место?
+                                            </p>
+                                            {post.similarRestaurants.map((place) => (
+                                                <div
+                                                    key={place.id}
+                                                    className="flex items-center justify-between gap-2"
+                                                >
+                                                    <div className="min-w-0">
+                                                        <p className="truncate text-xs font-semibold text-[#15291C]">
+                                                            {place.name}
+                                                        </p>
+                                                        <p className="truncate text-[11px] text-[#5C6B62]">
+                                                            {place.address} · {place.postsCount} постов
+                                                        </p>
+                                                    </div>
+                                                    <Button
+                                                        type="button"
+                                                        size="sm"
+                                                        variant="outline"
+                                                        className="shrink-0 text-xs"
+                                                        disabled={isPending}
+                                                        onClick={() => handleApprove(post, place.id)}
+                                                    >
+                                                        Привязать
+                                                    </Button>
+                                                </div>
                                             ))}
                                         </div>
                                     )}

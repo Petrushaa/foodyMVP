@@ -51,7 +51,9 @@ export default async function StaffPage() {
 
     const pending: PendingPost[] = pendingRaw.map((p: any) => ({
         id: p.id,
-        title: p.dish_name || "Без названия",
+        // Что появится в каталоге: до одобрения позиции ещё нет, поэтому
+        // название и заведение берём из заявки (will_create).
+        title: p.will_create?.menu_item?.name || p.menu_item?.name || "Без названия",
         author: p.user?.username || "—",
         authorFullName: p.user?.full_name || null,
         authorId: p.user?.id ?? null,
@@ -62,11 +64,22 @@ export default async function StaffPage() {
             .filter(Boolean),
         createdAt: p.created_at,
         description: p.description || "",
-        price: p.price ? `${parseFloat(p.price).toFixed(0)} ₽` : null,
-        restaurant: p.restaurant_name || "",
+        price: p.will_create?.menu_item?.price
+            ? `${parseFloat(p.will_create.menu_item.price).toFixed(0)} ₽`
+            : null,
+        restaurant: p.will_create?.restaurant?.name || p.menu_item?.restaurant?.name || "",
+        // Новое место модератор смотрит внимательнее всего.
+        restaurantIsNew: Boolean(p.will_create?.restaurant?.is_new),
+        warnings: p.warnings ?? [],
+        similarRestaurants: (p.similar_restaurants ?? []).map((r: any) => ({
+            id: r.id,
+            name: r.name,
+            address: r.address,
+            postsCount: r.posts_count ?? 0,
+        })),
         tags: (p.tags || []).map((t: any) => t.name),
         // Бэкенд хранит 0–10 (звёзды ×2) — делим на 2 для показа в 0–5.
-        rating: (p.statistics?.rating || 0) / 2,
+        rating: (p.author_rating || 0) / 2,
     }));
 
     return (

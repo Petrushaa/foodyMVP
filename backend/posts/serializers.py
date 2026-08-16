@@ -712,6 +712,11 @@ class ModerationDecisionSerializer(serializers.Serializer):
         required=False, allow_null=True,
         help_text='Привязать к существующей позиции вместо создания новой.',
     )
+    restaurant_id = serializers.PrimaryKeyRelatedField(
+        queryset=Restaurant.objects.filter(is_hidden=False),
+        required=False, allow_null=True,
+        help_text='Опознать заведение: блюдо новое, а место уже есть в каталоге.',
+    )
     menu_item_name = serializers.CharField(
         max_length=255, required=False, allow_blank=True,
         help_text='Поправленное название позиции.',

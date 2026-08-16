@@ -28,6 +28,8 @@ from ..models import (
 logger = logging.getLogger(__name__)
 
 # Порог схожести названия, при котором сервер считает, что человек заводит дубль.
+# По одному адресу опечатку в названии прощаем сильнее: место всё равно то же.
+SAME_ADDRESS_NAME_THRESHOLD = 0.3
 DUPLICATE_NAME_THRESHOLD = 0.55
 # Порог для фонового поиска дублей — там можно быть придирчивее, разбирает человек.
 BACKGROUND_DUPLICATE_THRESHOLD = 0.7
@@ -81,6 +83,11 @@ def find_possible_duplicates(name, address, city, limit=5):
     Совпадение считается вероятным, когда похоже название, а адрес либо совпадает,
     либо тоже похож. Одного названия мало: «Шоколадница» на разных улицах —
     это разные заведения, и склеивать их нельзя.
+
+    При **точном совпадении адреса** порог по названию заметно ниже. Два места
+    по одному адресу в одном городе — почти всегда одно и то же, и опечатка в
+    названии не повод их развести: «Ролльная» и «Ролная» на Мусорской 35 так и
+    разъехались в два заведения с одинаковыми роллами.
     """
     target_name = normalize_name(name)
     target_address = normalize_address(address)
@@ -94,8 +101,13 @@ def find_possible_duplicates(name, address, city, limit=5):
             name_similarity=TrigramSimilarity('normalized_name', target_name),
             address_similarity=TrigramSimilarity('normalized_address', target_address),
         )
-        .filter(name_similarity__gt=DUPLICATE_NAME_THRESHOLD)
-        .filter(Q(address_similarity__gt=0.5) | Q(normalized_address=target_address))
+        .filter(
+            # Адрес тот же — хватает куда более слабого сходства названий.
+            Q(normalized_address=target_address,
+              name_similarity__gt=SAME_ADDRESS_NAME_THRESHOLD)
+            | Q(address_similarity__gt=0.5,
+                name_similarity__gt=DUPLICATE_NAME_THRESHOLD)
+        )
         .order_by('-name_similarity', '-address_similarity')[:limit]
     )
 
@@ -149,7 +161,7 @@ def recalculate_restaurant_stats(restaurant):
 
 # --- Слияние дублей -------------------------------------------------------
 
-def _remember_alias(target, name, address):
+def remember_alias(target, name, address):
     """
     Сохраняет написание дубля синонимом выжившего.
 
@@ -203,7 +215,7 @@ def merge_restaurants(source, target):
     if source.pk == target.pk:
         return target
 
-    _remember_alias(target, source.name, source.address)
+    remember_alias(target, source.name, source.address)
     RestaurantAlias.objects.filter(restaurant=source).update(restaurant=target)
 
     existing = {item.normalized_name: item for item in MenuItem.objects.filter(restaurant=target)}

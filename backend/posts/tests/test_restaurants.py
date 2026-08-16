@@ -255,3 +255,31 @@ class TestMenuItemPhoto:
         photo = self._photo_of_first_item(api_client, restaurant)
         assert photo is not None, 'осталось фото с первого поста'
         assert str(new_post.images.first().image) not in photo
+
+
+@pytest.mark.django_db
+class TestDuplicateAtSameAddress:
+    """
+    По одному адресу опечатка в названии не должна разводить заведения.
+    Ровно так «Ролльная» и «Ролная» на одной улице стали двумя местами
+    с одинаковыми роллами.
+    """
+
+    @pytest.mark.parametrize('spelling', ['Кофемания', 'Кофеания', 'Коффемания', 'кофемания'])
+    def test_typos_at_the_same_address_are_caught(self, restaurant, spelling):
+        found = find_possible_duplicates(spelling, 'ул. Пушкина, д. 10', 'Москва')
+        assert restaurant in list(found)
+
+    def test_same_name_elsewhere_is_a_different_place(self, restaurant):
+        """«Шоколадница» на другой улице — другое заведение, склеивать нельзя."""
+        found = find_possible_duplicates('Кофемания', 'Тверская 15', 'Москва')
+        assert restaurant not in list(found)
+
+    def test_different_business_at_the_same_address(self, restaurant):
+        """В одном здании бывают разные заведения — фудкорт, например."""
+        found = find_possible_duplicates('Шаурмен', 'ул. Пушкина, д. 10', 'Москва')
+        assert restaurant not in list(found)
+
+    def test_other_city_is_never_a_duplicate(self, restaurant):
+        found = find_possible_duplicates('Кофемания', 'ул. Пушкина, д. 10', 'Казань')
+        assert list(found) == []

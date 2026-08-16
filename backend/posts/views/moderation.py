@@ -82,6 +82,7 @@ class ModerationViewSet(viewsets.ReadOnlyModelViewSet):
                 self.get_object(),
                 request.user,
                 menu_item=data.get('menu_item_id'),
+                restaurant=data.get('restaurant_id'),
                 menu_item_name=data.get('menu_item_name') or None,
                 accept_price=data.get('accept_price', True),
             )

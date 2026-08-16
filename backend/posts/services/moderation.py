@@ -16,7 +16,9 @@ from django.db import IntegrityError, transaction
 from django.utils import timezone
 
 from ..models import MenuItem, Post, Restaurant, normalize_name
-from .restaurants import get_or_create_restaurant, recalculate_restaurant_stats
+from .restaurants import (
+    get_or_create_restaurant, recalculate_restaurant_stats, remember_alias,
+)
 from .stats import recalculate_menu_item_stats, sync_menu_item_tags
 
 logger = logging.getLogger(__name__)
@@ -111,13 +113,18 @@ def _apply_price_proposal(post, menu_item, accept):
 
 
 @transaction.atomic
-def approve_post(post, moderator, *, menu_item=None, menu_item_name=None, accept_price=True):
+def approve_post(post, moderator, *, menu_item=None, restaurant=None,
+                 menu_item_name=None, accept_price=True):
     """
     Одобряет пост и заводит всё, чего не хватает в каталоге.
 
-    `menu_item` — модератор может привязать пост к существующей позиции вместо
-    создания новой (так и склеиваются дубли). `menu_item_name` — поправленное
-    название, если автор написал криво. `accept_price` — решение по предложенной цене.
+    `menu_item` — привязать пост к существующей позиции вместо создания новой.
+    `restaurant` — то же для заведения: блюдо новое, а место уже есть в каталоге.
+    Без этого одобрение всегда заводило новое заведение, и «Ролльная» с «Рольной»
+    по одному адресу расходились в два места с одинаковыми роллами.
+
+    `menu_item_name` — поправленное название, если автор написал криво.
+    `accept_price` — решение по предложенной цене.
     """
     if post.status == Post.STATUS_APPROVED:
         raise ModerationError('Пост уже одобрен.')
@@ -126,8 +133,14 @@ def approve_post(post, moderator, *, menu_item=None, menu_item_name=None, accept
 
     target = menu_item or post.menu_item
     if target is None:
-        restaurant = _restaurant_from_draft(post)
-        target, _ = _menu_item_from_draft(post, restaurant, name=menu_item_name)
+        place = restaurant or _restaurant_from_draft(post)
+        if restaurant is not None:
+            # Модератор опознал место: запоминаем написание автора синонимом,
+            # чтобы в следующий раз поиск привёл сюда сам.
+            remember_alias(restaurant, post.draft_restaurant_name,
+                           post.draft_restaurant_address)
+            post.draft_restaurant = restaurant
+        target, _ = _menu_item_from_draft(post, place, name=menu_item_name)
     elif menu_item_name:
         target.name = menu_item_name.strip()
         target.save(update_fields=['name', 'normalized_name'])

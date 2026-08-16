@@ -188,3 +188,48 @@ class TestTaxonsFromDishType:
 
         response = api_client.get(f'/api/v1/menu-items/?category_id={cuisine.id}')
         assert response.data['count'] == 1
+
+
+@pytest.mark.django_db
+class TestApproveIntoExistingRestaurant:
+    """
+    Модератор может опознать заведение: блюдо новое, а место уже в каталоге.
+
+    Без этого одобрение всегда заводило новое место, и «Ролльная» с «Рольной»
+    по одному адресу расходились в два заведения с одинаковыми роллами.
+    """
+
+    def test_post_attaches_to_named_restaurant(self, author, moderator, make_post,
+                                               restaurant):
+        post = make_post(author, restaurant_name='Кафе Кофемания',
+                         address='Пушкина 10', city='Москва')
+
+        approve_post(post, moderator, restaurant=restaurant)
+
+        post.refresh_from_db()
+        assert post.menu_item.restaurant == restaurant
+        assert Restaurant.objects.count() == 1, 'второе заведение не заводится'
+
+    def test_authors_spelling_becomes_alias(self, author, moderator, make_post,
+                                            restaurant):
+        post = make_post(author, restaurant_name='Кафе Кофемания',
+                         address='Пушкина 10', city='Москва')
+
+        approve_post(post, moderator, restaurant=restaurant)
+
+        aliases = [a.name for a in restaurant.aliases.all()]
+        assert 'Кафе Кофемания' in aliases, 'следующий поиск приведёт сюда сам'
+
+    def test_second_author_stacks_on_the_same_position(self, author, other_author,
+                                                       moderator, make_post, restaurant):
+        """Ровно тот случай: двое написали про одно блюдо в одном месте."""
+        first = make_post(author, restaurant=restaurant, item='Роллы')
+        approve_post(first, moderator)
+
+        second = make_post(other_author, restaurant_name='Ролльная',
+                           address='Мусорская 35', city='Москва', item='Роллы')
+        approve_post(second, moderator, restaurant=restaurant)
+
+        first.refresh_from_db(); second.refresh_from_db()
+        assert first.menu_item == second.menu_item, 'посты стакаются на одной позиции'
+        assert second.menu_item.posts_count == 2

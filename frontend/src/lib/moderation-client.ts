@@ -31,9 +31,18 @@ function explain(data: unknown): string {
     return typeof first === "string" ? first : "";
 }
 
-export async function approvePostClient(postId: number, _accessToken?: string) {
+export async function approvePostClient(
+    postId: number,
+    _accessToken?: string,
+    restaurantId?: number,
+) {
     try {
-        await bePost(`/moderation/${postId}/approve`);
+        // restaurantId — модератор опознал место: блюдо заведётся в нём,
+        // а не в новом заведении по написанию автора.
+        await bePost(
+            `/moderation/${postId}/approve`,
+            restaurantId ? { restaurant_id: restaurantId } : undefined,
+        );
         return { success: true as const };
     } catch (e: any) {
         return { error: e?.message || "Ошибка одобрения" };
