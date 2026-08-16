@@ -46,3 +46,7 @@ backend/static/
 frontend-foody-front.bak/
 .claude/scheduled_tasks.lock
 .dev-media/
+
+# Исходники иконок: тяжёлые фотографии, из которых собираются иконки справочника.
+# В репозиторий едут только уменьшенные копии — backend/catalog_icons/.
+/icons/
