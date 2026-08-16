@@ -99,26 +99,28 @@ export function SubscribeStyleButton({
 
     setIsAnimating(true);
 
-    if (!shouldAnimate) {
-      try {
-        await onClick?.();
-      } finally {
-        setIsAnimating(false);
-      }
-
-      return;
-    }
-
-    try {
-      await scaleControls.start({
+    // Анимацию не ждём. Раньше клик ждал её промис, а он не завершался, если
+    // родитель успевал перерисовать карточку: finally не выполнялся,
+    // isAnimating оставался true, и кнопка навсегда переставала отвечать —
+    // без запроса и без ошибки. Отскок пружины — украшение, действие не
+    // должно от него зависеть.
+    if (shouldAnimate) {
+      void scaleControls.start({
         scale: 1,
         transition: SUBSCRIBE_RETURN_TRANSITION,
       });
+    }
+
+    try {
       await onClick?.();
     } finally {
-      window.setTimeout(() => {
+      if (shouldAnimate) {
+        window.setTimeout(() => {
+          setIsAnimating(false);
+        }, SUBSCRIBE_STATE_SETTLE_MS);
+      } else {
         setIsAnimating(false);
-      }, SUBSCRIBE_STATE_SETTLE_MS);
+      }
     }
   }
 
