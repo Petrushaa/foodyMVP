@@ -27,6 +27,24 @@ QUALITY = 82
 SOURCE_SUFFIXES = {'.png', '.webp', '.jpg', '.jpeg'}
 
 
+def _square(image):
+    """
+    Обрезает по центру до квадрата и уменьшает.
+
+    Плитка в интерфейсе квадратная, а картинка растягивается на неё целиком.
+    Широкий кадр без обрезки либо сплющился бы, либо оставил поля — поэтому
+    берём середину: у иконок смысл обычно там.
+    """
+    width, height = image.size
+    if width != height:
+        side = min(width, height)
+        left = (width - side) // 2
+        top = (height - side) // 2
+        image = image.crop((left, top, left + side, top + side))
+
+    return image.resize((SIZE, SIZE), Image.LANCZOS)
+
+
 class Command(BaseCommand):
     help = 'Уменьшает исходные картинки и раскладывает их по папкам catalog_icons.'
 
@@ -79,8 +97,7 @@ class Command(BaseCommand):
                 continue
 
             target.mkdir(parents=True, exist_ok=True)
-            image = Image.open(path).convert('RGB')
-            image.thumbnail((SIZE, SIZE), Image.LANCZOS)
+            image = _square(Image.open(path).convert('RGB'))
             image.save(dest, 'WEBP', quality=QUALITY, method=6)
             self.stdout.write(f'  {path.name} → {dest.name}  {dest.stat().st_size // 1024} КБ')
 
