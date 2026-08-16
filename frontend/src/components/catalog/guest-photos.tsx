@@ -93,7 +93,7 @@ export function GuestPhotos({ shots, dishName }: { shots: GuestShot[]; dishName:
 
   return (
     <>
-      <div className="hide-scroll -mx-4 flex snap-x gap-2.5 overflow-x-auto px-4 pb-1">
+      <div className="hide-scroll flex snap-x gap-2.5 overflow-x-auto pb-1">
         {shots.map((shot, i) => (
           <button
             key={`${shot.postId}-${i}`}
