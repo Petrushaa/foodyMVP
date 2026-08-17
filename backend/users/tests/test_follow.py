@@ -12,17 +12,26 @@ def api_client():
 
 @pytest.fixture
 def user_a(db):
-    return User.objects.create_user(username="user_a", email="a@test.com", password="pwd")
+    return User.objects.create_user(
+        username="user_a", email="a@test.com", password="pwd",
+        email_verified=True,
+    )
 
 
 @pytest.fixture
 def user_b(db):
-    return User.objects.create_user(username="user_b", email="b@test.com", password="pwd")
+    return User.objects.create_user(
+        username="user_b", email="b@test.com", password="pwd",
+        email_verified=True,
+    )
 
 
 @pytest.fixture
 def user_c(db):
-    return User.objects.create_user(username="user_c", email="c@test.com", password="pwd")
+    return User.objects.create_user(
+        username="user_c", email="c@test.com", password="pwd",
+        email_verified=True,
+    )
 
 
 def get_token(api_client, email, password="pwd"):

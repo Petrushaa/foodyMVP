@@ -17,3 +17,20 @@ REDIS_URL=redis://redis:6379/0
 
 # Периодичность задачи пересчёта статистики: '10s', '1m', '1h'
 UPDATE_STATS_INTERVAL=1m
+
+# ── Почта (smtp.bz) ──
+# Точные хост и порт возьмите в панели smtp.bz, логин — адрес отправителя,
+# пароль — ключ SMTP оттуда же. Без EMAIL_HOST письма печатаются в лог
+# контейнера вместо отправки: это режим разработки.
+EMAIL_HOST=connect.smtp.bz
+EMAIL_PORT=587
+EMAIL_HOST_USER=<логин-из-панели-smtp.bz>
+EMAIL_HOST_PASSWORD=<ключ-smtp>
+EMAIL_USE_TLS=1
+EMAIL_USE_SSL=0
+DEFAULT_FROM_EMAIL=Foody <noreply@foody.press>
+
+# Коды из писем: срок жизни, лимит попыток ввода, пауза между письмами
+EMAIL_CODE_TTL=15m
+EMAIL_CODE_MAX_ATTEMPTS=5
+EMAIL_CODE_RESEND_COOLDOWN=60s

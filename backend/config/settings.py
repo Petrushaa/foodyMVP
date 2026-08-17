@@ -220,6 +220,9 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '60/minute',
         'login': '10/minute',
+        # Письма и коды: перебор шестизначного кода и рассылка писем на чужой
+        # ящик — обе угрозы упираются в этот лимит.
+        'email_code': '30/hour',
         'user': '300/minute',
     },
 }
@@ -280,6 +283,38 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=1),
     'AUTH_HEADER_TYPES': ('Bearer',),
 }
+
+# Почта
+#
+# Транзакционные письма (коды подтверждения и сброса пароля) уходят через
+# внешний SMTP-релей: свой почтовый сервер на этом же VPS попадал бы в спам у
+# mail.ru и Gmail без PTR, прогрева адреса и постоянной чистки блоклистов.
+# Настройки все из окружения — сменить релей можно без правки кода.
+#
+# Без EMAIL_HOST письма печатаются в консоль. Это режим разработки: код видно
+# в логах, почта не нужна, случайных писем живым людям не уходит.
+EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
+EMAIL_BACKEND = (
+    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST
+    else 'django.core.mail.backends.console.EmailBackend'
+)
+EMAIL_PORT = get_env_int('EMAIL_PORT', 587)
+EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
+EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')
+EMAIL_USE_TLS = bool(int(os.environ.get('EMAIL_USE_TLS', '1')))
+EMAIL_USE_SSL = bool(int(os.environ.get('EMAIL_USE_SSL', '0')))
+EMAIL_TIMEOUT = get_env_int('EMAIL_TIMEOUT', 15)
+DEFAULT_FROM_EMAIL = os.environ.get('DEFAULT_FROM_EMAIL', 'Foody <noreply@foody.press>')
+
+# Коды из писем
+EMAIL_CODE_TTL = timedelta(seconds=get_env_time_interval('EMAIL_CODE_TTL', '15m'))
+# Шесть цифр — миллион вариантов, автоматика переберёт их за минуты. Лимит
+# попыток и есть то, что делает короткий код безопасным.
+EMAIL_CODE_MAX_ATTEMPTS = get_env_int('EMAIL_CODE_MAX_ATTEMPTS', 5)
+# Пауза между письмами: без неё формой можно завалить чужой ящик.
+EMAIL_CODE_RESEND_COOLDOWN = timedelta(
+    seconds=get_env_time_interval('EMAIL_CODE_RESEND_COOLDOWN', '60s'),
+)
 
 # Celery
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')

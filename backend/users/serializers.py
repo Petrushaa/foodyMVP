@@ -1,10 +1,25 @@
 import bleach
 from django.db import IntegrityError
-from rest_framework import serializers
+from rest_framework import serializers, status
+from rest_framework.exceptions import APIException
 from rest_framework.validators import UniqueValidator
 from django.contrib.auth.password_validation import validate_password
 from rest_framework_simplejwt.serializers import TokenObtainPairSerializer
 from .models import User, Follow
+
+
+class EmailNotVerified(APIException):
+    """
+    Пароль верный, но почта ещё не подтверждена.
+
+    Отдельный класс, а не ValidationError: тот заворачивает каждое значение в
+    список, и фронту вместо признака 'email_not_verified' приходил бы массив из
+    одного элемента. А 403 вместо 401 отделяет «вас знаем, но пока не пускаем»
+    от «неверный пароль» — экраны у этих случаев разные.
+    """
+
+    status_code = status.HTTP_403_FORBIDDEN
+    default_code = 'email_not_verified'
 
 
 class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
@@ -14,7 +29,17 @@ class EmailTokenObtainPairSerializer(TokenObtainPairSerializer):
     def validate(self, attrs):
         # simplejwt ожидает username_field, передаём email
         attrs[self.username_field] = attrs.get(self.username_field, '').lower()
-        return super().validate(attrs)
+        data = super().validate(attrs)
+
+        # Неподтверждённая почта — не ошибка пароля, и фронт должен отличать
+        # одно от другого: здесь человеку нужен экран ввода кода, а не «неверный
+        # пароль». Поэтому отдельный code, а не общий текст отказа.
+        if not self.user.email_verified:
+            raise EmailNotVerified({
+                'detail': 'Подтвердите почту — мы отправили код на ваш адрес.',
+                'code': 'email_not_verified',
+            })
+        return data
 
 class UserSerializer(serializers.ModelSerializer):
     posts_count = serializers.SerializerMethodField()
@@ -174,3 +199,30 @@ class UserRegistrationSerializer(serializers.ModelSerializer):
                 {'non_field_errors': 'Не удалось создать пользователя.'}
             )
         return user
+
+
+class EmailRequestSerializer(serializers.Serializer):
+    """Один адрес — для повторной отправки кода и для запроса сброса пароля."""
+
+    email = serializers.EmailField()
+
+    def validate_email(self, value):
+        return value.strip().lower()
+
+
+class CodeCheckSerializer(EmailRequestSerializer):
+    """Адрес и код из письма."""
+
+    code = serializers.CharField(min_length=6, max_length=6, trim_whitespace=True)
+
+
+class PasswordResetConfirmSerializer(CodeCheckSerializer):
+    """Смена пароля по коду из письма."""
+
+    password = serializers.CharField(write_only=True, validators=[validate_password])
+    password_confirm = serializers.CharField(write_only=True)
+
+    def validate(self, attrs):
+        if attrs['password'] != attrs['password_confirm']:
+            raise serializers.ValidationError({'password_confirm': 'Пароли не совпадают.'})
+        return attrs
