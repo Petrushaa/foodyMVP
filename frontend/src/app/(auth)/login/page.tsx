@@ -1,6 +1,9 @@
 "use client";
 
 import { authenticate } from "@/app/actions/auth";
+import { verifyEmailCode } from "@/app/actions/email-codes";
+import { CodeStep } from "@/components/auth/code-step";
+import { useRouter } from "next/navigation";
 import React, { useState, useTransition } from "react";
 import Link from "next/link";
 import { Mail, Lock, Eye, EyeOff } from "lucide-react";
@@ -23,6 +26,9 @@ export default function LoginPage() {
   const [showPassword, setShowPassword] = useState(false);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  // Регистрацию не довели до конца: пароль верный, не хватает кода из письма.
+  const [awaitingCode, setAwaitingCode] = useState(false);
+  const router = useRouter();
 
   function submit(formData: FormData) {
     if (!email.trim() || !password) {
@@ -32,15 +38,41 @@ export default function LoginPage() {
     setErrorMessage("");
     startTransition(() => {
       authenticate(undefined, formData)
-        .then((err) => err && setErrorMessage(err))
+        .then((err) => {
+          if (!err) return;
+          // Отдельный признак от бэкенда: человеку нужен код, а не другой
+          // пароль — «неверный email или пароль» отправило бы его вспоминать
+          // то, что он помнит правильно.
+          if (err === "email_not_verified") setAwaitingCode(true);
+          else setErrorMessage(err);
+        })
         .catch(() => setErrorMessage("Не удалось войти"));
     });
+  }
+
+  async function checkCode(code: string) {
+    const res = await verifyEmailCode(email, code, password);
+    if (!res.ok) return res.error ?? "Неверный или устаревший код.";
+    router.push("/me");
+    router.refresh();
+    return null;
   }
 
   return (
     <main className="absolute inset-0 overflow-hidden bg-[#F6F7F6]">
       <div className="absolute inset-0 flex flex-col px-5 pt-14 pb-10">
         <GlassSurface className="flex flex-1 flex-col rounded-[26px] border border-white/65 bg-white/45 px-5 pt-8 pb-5 shadow-[0_8px_24px_rgba(20,40,28,0.10),0_2px_6px_rgba(20,40,28,0.06)]">
+          {awaitingCode ? (
+            <CodeStep
+              email={email}
+              title="Подтвердите почту"
+              hint="Регистрация не была завершена. Мы отправили код на"
+              submitLabel="Подтвердить и войти"
+              onSubmit={checkCode}
+              onBack={() => setAwaitingCode(false)}
+            />
+          ) : (
+          <>
           <header className="mb-7 text-center">
             <h1 className="text-[40px] font-extrabold tracking-[-0.5px] text-[#15291C]">Foody</h1>
             <p className="mt-2 text-[14.5px] leading-[1.45] font-medium text-[#5C6B62]">
@@ -99,6 +131,13 @@ export default function LoginPage() {
               {isPending ? "Вход..." : "Войти"}
             </button>
 
+            <Link
+              href="/forgot-password"
+              className="mx-auto text-[13px] font-semibold text-[#1B7F45]"
+            >
+              Забыли пароль?
+            </Link>
+
             <div className="mt-auto pt-4 text-center text-[13px] font-medium text-[#5C6B62]">
               Нет аккаунта?{" "}
               <Link href="/register" className="font-semibold text-[#1B7F45]">
@@ -106,6 +145,8 @@ export default function LoginPage() {
               </Link>
             </div>
           </form>
+          </>
+          )}
         </GlassSurface>
       </div>
     </main>
