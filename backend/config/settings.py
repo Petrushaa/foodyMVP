@@ -294,10 +294,17 @@ SIMPLE_JWT = {
 # Без EMAIL_HOST письма печатаются в консоль. Это режим разработки: код видно
 # в логах, почта не нужна, случайных писем живым людям не уходит.
 EMAIL_HOST = os.environ.get('EMAIL_HOST', '')
-EMAIL_BACKEND = (
-    'django.core.mail.backends.smtp.EmailBackend' if EMAIL_HOST
-    else 'django.core.mail.backends.console.EmailBackend'
-)
+# EMAIL_FILE_PATH складывает письма файлами в указанную папку. Это удобнее
+# консоли при локальной разработке: письмо отправляет Celery-воркер, и в
+# консоли оно оказывается в его окне — не в том, где запущен Django, а под
+# nohup не видно вовсе. Файл открывается когда угодно и кем угодно.
+EMAIL_FILE_PATH = os.environ.get('EMAIL_FILE_PATH', '')
+if EMAIL_HOST:
+    EMAIL_BACKEND = 'django.core.mail.backends.smtp.EmailBackend'
+elif EMAIL_FILE_PATH:
+    EMAIL_BACKEND = 'django.core.mail.backends.filebased.EmailBackend'
+else:
+    EMAIL_BACKEND = 'django.core.mail.backends.console.EmailBackend'
 EMAIL_PORT = get_env_int('EMAIL_PORT', 587)
 EMAIL_HOST_USER = os.environ.get('EMAIL_HOST_USER', '')
 EMAIL_HOST_PASSWORD = os.environ.get('EMAIL_HOST_PASSWORD', '')

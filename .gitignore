@@ -46,6 +46,8 @@ backend/static/
 frontend-foody-front.bak/
 .claude/scheduled_tasks.lock
 .dev-media/
+# Письма локальной разработки: коды подтверждения падают сюда файлами
+.dev-mail/
 
 # Исходники иконок: тяжёлые фотографии, из которых собираются иконки справочника.
 # В репозиторий едут только уменьшенные копии — backend/catalog_icons/.
