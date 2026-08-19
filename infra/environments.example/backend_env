@@ -20,12 +20,16 @@ POSTGRES_PORT=5432
 REDIS_URL=redis://redis:6379/0
 
 # ── Почта (smtp.bz) ──
-# Точные хост и порт возьмите в панели smtp.bz, логин — адрес отправителя,
-# пароль — ключ SMTP оттуда же. Без EMAIL_HOST письма печатаются в лог
-# контейнера вместо отправки: это режим разработки.
+# Логин и пароль — из панели smtp.bz. Логин к отправителю отношения не имеет:
+# DEFAULT_FROM_EMAIL обязан быть на домене, подтверждённом в smtp.bz, иначе
+# релей отвечает «Domain not verified» и письмо не уходит.
+# Порт 587 со STARTTLS; если хостер режет его, у smtp.bz есть 2525.
+# Без EMAIL_HOST письма не отправляются: EMAIL_FILE_PATH складывает их
+# файлами в папку, а без него — печатает в лог. Это режимы разработки.
 EMAIL_HOST=connect.smtp.bz
 EMAIL_PORT=587
 EMAIL_HOST_USER=<логин-из-панели-smtp.bz>
+# EMAIL_FILE_PATH=/app/.dev-mail   # только для разработки
 EMAIL_HOST_PASSWORD=<ключ-smtp>
 EMAIL_USE_TLS=1
 EMAIL_USE_SSL=0
