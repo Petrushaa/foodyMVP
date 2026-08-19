@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Search } from "lucide-react";
+import { ArrowLeft, ChevronRight, Search } from "lucide-react";
 
 import { CategoryModeToggle } from "@/components/categories/category-mode-toggle";
 import { GlassSurface } from "@/components/feed/glass-surface";
@@ -184,17 +184,21 @@ export function SearchComposer({
                   <h3 className="shrink-0 text-[15px] leading-none font-extrabold tracking-[-0.3px] text-[#15291C]">
                     {section.title}
                   </h3>
+                  <span className="shrink-0 text-[11.5px] leading-none font-bold text-[#8A958E] tabular-nums">
+                    {section.items.length}
+                  </span>
                   <span className="h-px flex-1 bg-[rgba(20,40,28,0.12)]" />
                   {groupChip && (
                     <button
                       type="button"
                       onClick={() => goToCategory(groupChip)}
+                      aria-label={`Показать все: ${section.title}`}
                       className={cn(
-                        "shrink-0 rounded-full bg-[#2ECC71]/12 px-2.5 py-1 text-[11.5px] leading-none font-bold text-[#1B7F45]",
+                        "grid size-[26px] shrink-0 place-items-center rounded-full bg-[#2ECC71]/12 text-[#1B7F45]",
                         PRESS_CLASSES
                       )}
                     >
-                      все {section.items.length}
+                      <ChevronRight size={16} strokeWidth={2.6} />
                     </button>
                   )}
                 </div>
