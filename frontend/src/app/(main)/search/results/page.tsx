@@ -54,13 +54,22 @@ export default async function SearchResultsPage({
   const accessToken: string | null = session?.user?.accessToken ?? null;
 
   // Три группы для фильтра в шапке: блюда, кухни и виды.
-  const [dishes, cuisines, types] = await Promise.all([
+  const [dishes, cuisines, types, dishGroups] = await Promise.all([
     getDishCategories(),
     getCuisineCategories(),
     getTypeCategories(),
+    getDishGroups(),
   ]);
   const categoryGroups: CategoryGroups = {
-    dishes: dishes.map((c) => ({ id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
+    dishes: dishes.map((c) => ({
+      id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon,
+      group: c.group, groupName: c.groupName,
+    })),
+    // Группа ищется целиком и уходит своим параметром — отсюда isGroup.
+    dishGroups: dishGroups.map((c) => ({
+      id: `dgrp-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon,
+      group: c.group, groupName: c.groupName, isGroup: true,
+    })),
     cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
     types: types.map((c) => ({ id: `type-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
   };

@@ -155,6 +155,8 @@ async function loadDishTypes(): Promise<FoodCategory[] | null> {
       emoji: item.emoji || "🍽️",
       icon: fixMediaUrl(item.icon) || undefined,
       mode: "dishes" as const,
+      group: item.group || undefined,
+      groupName: item.group_name || undefined,
     }));
   } catch {
     return null;
