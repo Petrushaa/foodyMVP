@@ -62,7 +62,7 @@ Auth двухслойный: NextAuth на фронте оборачивает J
 
 ### Backend
 
-Два рабочих Django-приложения (app `foody/` — пустой рудимент, его нет в `INSTALLED_APPS`):
+Два Django-приложения:
 
 - **`users`** — кастомный `User` (`AUTH_USER_MODEL = 'users.User'`), `Follow`, регистрация/профиль/подписки.
 - **`posts`** — всё остальное: справочники (Tag, Category, Cuisine, DishType), Restaurant/Dish, Post + модерация, лайки/сохранения/оценки/комментарии, статистика. Views разнесены по файлам в `posts/views/` (posts, restaurants, moderation, actions, comment_likes).
@@ -85,7 +85,6 @@ API: префикс `/api/v1/`, по умолчанию `IsAuthenticated` + JWT 
 - `PostStatistics` (OneToOne к Post, создаётся сигналом при создании поста) держит `likes_count`, `saves_count`, `comments_count`, `rating`.
 - Счётчики лайков/сохранений/комментариев и `Tag.usage_count`, `User.followers_count/following_count` обновляются **синхронно сигналами** через атомарный `F()` (`posts/signals.py`, `users/signals.py`; сигналы подключены в `apps.py::ready`). Декременты защищены от ухода в минус (`__gt=0`).
 - `rating` пересчитывается **периодически** Celery beat-задачей `posts.tasks.update_post_ratings` (интервал `UPDATE_STATS_INTERVAL`, дефолт 5m) агрегацией по `PostReview`.
-- В `posts/tasks.py` и `users/tasks.py` есть старые celery-задачи инкремента счётчиков — активный путь именно сигналы, задачи-дубли не использовать.
 
 При изменении моделей помнить: денормализованные счётчики требуют либо сигнала, либо backfill-миграции (примеры: `users/0006_recalc_counters.py`, `posts/0014_backfill_dishcategory.py`, `posts/0019_seed_dish_classification.py` — data-миграции здесь норма).
 

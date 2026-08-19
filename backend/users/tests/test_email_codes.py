@@ -126,6 +126,24 @@ class TestSignupCode:
         registered.refresh_from_db()
         assert registered.email_verified is False
 
+    def test_verified_email_looks_like_a_wrong_code(self, api_client, registered):
+        """
+        Подтверждённый адрес не должен отличаться по ответу от неверного кода.
+        Иначе перебором адресов находятся живые аккаунты — а именно от этого
+        мы и закрывались во всех остальных ручках.
+        """
+        api_client.post(reverse('email-verify'), {
+            'email': 'newbie@test.com', 'code': code_from_mail(),
+        })
+        resp = api_client.post(reverse('email-verify'), {
+            'email': 'newbie@test.com', 'code': '123456',
+        })
+        unknown = api_client.post(reverse('email-verify'), {
+            'email': 'nobody@test.com', 'code': '123456',
+        })
+        assert resp.status_code == unknown.status_code == 400
+        assert resp.data == unknown.data
+
     def test_unknown_email_looks_the_same(self, api_client, db):
         """По ответу нельзя понять, есть такой адрес или нет."""
         resp = api_client.post(reverse('email-verify'), {

@@ -10,15 +10,11 @@ import { CitySelect } from "@/components/ui/city-select";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { cn } from "@/lib/utils";
+import {
+  FIELD_SURFACE_AUTO as FIELD_SURFACE,
+  FIELD_INPUT_PLAIN as FIELD_INPUT,
+} from "@/components/ui/field-styles";
 
-const FIELD_SURFACE = cn(
-  "relative rounded-[18px] border border-white/65 bg-transparent",
-  "shadow-[0_8px_20px_rgba(20,40,28,0.08),inset_1px_1px_0_rgba(255,255,255,0.72)]",
-  "backdrop-blur-[16px] backdrop-saturate-[170%]",
-  "focus-within:ring-2 focus-within:ring-[#15291C]/12",
-);
-const FIELD_INPUT =
-  "h-[50px] border-0 bg-transparent px-3.5 py-0 text-[15.5px] leading-[50px] font-semibold text-[#15291C] shadow-none outline-none placeholder:text-[#8A958E] focus-visible:ring-0";
 
 interface UserData {
   name: string;

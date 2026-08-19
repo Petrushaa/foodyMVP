@@ -1,5 +1,7 @@
 "use client";
 
+import { explainApiError } from "@/lib/api-errors";
+
 // Модерация с клиента идёт через BFF-прокси /backend — Authorization
 // подставляется из httpOnly-сессии на сервере, реальный JWT в браузер не
 // передаётся. accessToken-параметр оставлен для совместимости (не используется;
@@ -16,20 +18,11 @@ async function bePost(path: string, body?: unknown) {
         // Показываем модератору, что именно сказал бэк: «status 400» ничего
         // не объясняет, а причина отказа почти всегда в теле ответа.
         const data = await res.json().catch(() => null);
-        throw new Error(explain(data) || `Ошибка ${res.status}`);
+        throw new Error(explainApiError(data) || `Ошибка ${res.status}`);
     }
     return res.json().catch(() => ({}));
 }
 
-/** Достаёт человекочитаемый текст из ответа DRF: {detail} или {поле: [текст]}. */
-function explain(data: unknown): string {
-    if (!data || typeof data !== "object") return "";
-    const payload = data as Record<string, unknown>;
-    if (typeof payload.detail === "string") return payload.detail;
-    const first = Object.values(payload)[0];
-    if (Array.isArray(first) && typeof first[0] === "string") return first[0];
-    return typeof first === "string" ? first : "";
-}
 
 export async function approvePostClient(
     postId: number,

@@ -1,6 +1,7 @@
 "use server";
 
 import { signIn } from "@/auth";
+import { explainApiError } from "@/lib/api-errors";
 
 /**
  * Подтверждение почты и сброс пароля.
@@ -43,14 +44,6 @@ async function post(path: string, body: unknown) {
     }
 }
 
-/** Достаёт человекочитаемый текст из ответа DRF: {detail} или {поле: [текст]}. */
-function explain(data: any, fallback: string) {
-    if (!data || typeof data !== "object") return fallback;
-    if (typeof data.detail === "string") return data.detail;
-    const first = Object.values(data)[0];
-    if (Array.isArray(first) && typeof first[0] === "string") return first[0];
-    return typeof first === "string" ? first : fallback;
-}
 
 /** Открывает сессию после того, как код подтвердил владение ящиком. */
 async function signInAfterCode(email: string, password?: string): Promise<Result> {
@@ -72,33 +65,33 @@ export async function verifyEmailCode(
     const { status, data } = await post("/users/email/verify/", { email, code });
     if (status === 200) return signInAfterCode(email, password);
     if (status === 0) return { ok: false, error: "Сервер не отвечает. Попробуйте ещё раз." };
-    return { ok: false, error: explain(data, "Неверный или устаревший код.") };
+    return { ok: false, error: explainApiError(data, "Неверный или устаревший код.") };
+}
+
+/**
+ * Запрос письма с кодом. Подтверждение почты и сброс пароля отличаются только
+ * адресом ручки: и ответ, и разбор 429 у них одинаковые.
+ */
+async function requestCode(path: string, email: string): Promise<Result> {
+    const { status, data } = await post(path, { email });
+    if (status === 200) return { ok: true };
+    if (status === 429) {
+        return {
+            ok: false,
+            error: explainApiError(data, "Письмо уже отправлено."),
+            // Сколько ждать — знает бэкенд; кнопка повтора считает по этому числу.
+            retryAfter: data?.retry_after,
+        };
+    }
+    return { ok: false, error: explainApiError(data, "Не удалось отправить письмо.") };
 }
 
 export async function resendEmailCode(email: string): Promise<Result> {
-    const { status, data } = await post("/users/email/resend/", { email });
-    if (status === 200) return { ok: true };
-    if (status === 429) {
-        return {
-            ok: false,
-            error: explain(data, "Письмо уже отправлено."),
-            retryAfter: data?.retry_after,
-        };
-    }
-    return { ok: false, error: explain(data, "Не удалось отправить письмо.") };
+    return requestCode("/users/email/resend/", email);
 }
 
 export async function requestPasswordReset(email: string): Promise<Result> {
-    const { status, data } = await post("/users/password/reset/", { email });
-    if (status === 200) return { ok: true };
-    if (status === 429) {
-        return {
-            ok: false,
-            error: explain(data, "Письмо уже отправлено."),
-            retryAfter: data?.retry_after,
-        };
-    }
-    return { ok: false, error: explain(data, "Не удалось отправить письмо.") };
+    return requestCode("/users/password/reset/", email);
 }
 
 export async function confirmPasswordReset(
@@ -114,5 +107,5 @@ export async function confirmPasswordReset(
     });
     if (status === 200) return signInAfterCode(email, password);
     if (status === 0) return { ok: false, error: "Сервер не отвечает. Попробуйте ещё раз." };
-    return { ok: false, error: explain(data, "Неверный или устаревший код.") };
+    return { ok: false, error: explainApiError(data, "Неверный или устаревший код.") };
 }

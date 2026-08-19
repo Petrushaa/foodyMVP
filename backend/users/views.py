@@ -51,32 +51,52 @@ def _find_user(email):
     return User.objects.filter(email__iexact=email).first()
 
 
-class EmailCodeResendView(APIView):
-    """
-    Отправить код подтверждения ещё раз.
+# Один и тот же текст на «адрес не найден», «код неверный» и «код протух».
+# Это не лень, а требование: по разнице ответов адреса перебирают.
+BAD_CODE = {'detail': 'Неверный или устаревший код.'}
+# И то же самое для отправки письма — сказать «такого адреса нет» значит
+# превратить форму в способ узнать, кто зарегистрирован в сервисе.
+CODE_SENT = {'detail': 'Если такой адрес есть, мы отправили на него код.'}
 
-    Ответ одинаковый, есть такой адрес или нет: иначе форма превращается в
-    способ узнать, кто зарегистрирован в сервисе.
+
+class CodeRequestView(APIView):
+    """
+    Общее основание для «выслать код»: подтверждение почты и сброс пароля
+    отличаются только назначением кода и условием, кому его вообще слать.
     """
 
     permission_classes = (AllowAny,)
     throttle_classes = [EmailCodeThrottle]
+    purpose = None
+
+    def should_send(self, user):
+        return True
 
     def post(self, request):
         serializer = EmailRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
-        email = serializer.validated_data['email']
 
-        user = _find_user(email)
-        if user is not None and not user.email_verified:
-            wait = issue_and_send(user, EmailCode.PURPOSE_SIGNUP)
+        user = _find_user(serializer.validated_data['email'])
+        if user is not None and self.should_send(user):
+            wait = issue_and_send(user, self.purpose)
             if wait:
                 return Response(
                     {'detail': f'Письмо уже отправлено. Повторить можно через {wait} с.',
                      'retry_after': wait},
                     status=status.HTTP_429_TOO_MANY_REQUESTS,
                 )
-        return Response({'detail': 'Если такой адрес есть, мы отправили на него код.'})
+        return Response(CODE_SENT)
+
+
+class EmailCodeResendView(CodeRequestView):
+    """Отправить код подтверждения ещё раз."""
+
+    purpose = EmailCode.PURPOSE_SIGNUP
+
+    def should_send(self, user):
+        # Подтверждённой почте код не нужен, и слать его повторно — только
+        # тревожить владельца ящика.
+        return not user.email_verified
 
 
 class EmailVerifyView(APIView):
@@ -95,20 +115,15 @@ class EmailVerifyView(APIView):
         code = serializer.validated_data['code']
 
         user = _find_user(email)
-        if user is None:
-            # Тот же текст, что и при неверном коде: перебором адресов здесь
-            # тоже не должно быть видно, кто зарегистрирован.
-            return Response({'detail': 'Неверный или устаревший код.'},
-                            status=status.HTTP_400_BAD_REQUEST)
-
-        if user.email_verified:
-            return Response({'detail': 'Почта уже подтверждена.', 'code': 'already_verified'},
-                            status=status.HTTP_400_BAD_REQUEST)
+        # Незнакомый адрес и подтверждённый разбираем вместе с неверным кодом:
+        # ответ «почта уже подтверждена» отличался от «неверный код», и по
+        # этой разнице можно было перебором находить живые аккаунты.
+        if user is None or user.email_verified:
+            return Response(BAD_CODE, status=status.HTTP_400_BAD_REQUEST)
 
         record = EmailCode.last_for(user, EmailCode.PURPOSE_SIGNUP)
         if record is None or not record.verify(code):
-            return Response({'detail': 'Неверный или устаревший код.'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response(BAD_CODE, status=status.HTTP_400_BAD_REQUEST)
 
         user.email_verified = True
         user.save(update_fields=['email_verified'])
@@ -116,26 +131,10 @@ class EmailVerifyView(APIView):
         return Response(_tokens_for(user))
 
 
-class PasswordResetRequestView(APIView):
+class PasswordResetRequestView(CodeRequestView):
     """Запрос кода для смены пароля."""
 
-    permission_classes = (AllowAny,)
-    throttle_classes = [EmailCodeThrottle]
-
-    def post(self, request):
-        serializer = EmailRequestSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-
-        user = _find_user(serializer.validated_data['email'])
-        if user is not None:
-            wait = issue_and_send(user, EmailCode.PURPOSE_RESET)
-            if wait:
-                return Response(
-                    {'detail': f'Письмо уже отправлено. Повторить можно через {wait} с.',
-                     'retry_after': wait},
-                    status=status.HTTP_429_TOO_MANY_REQUESTS,
-                )
-        return Response({'detail': 'Если такой адрес есть, мы отправили на него код.'})
+    purpose = EmailCode.PURPOSE_RESET
 
 
 class PasswordResetConfirmView(APIView):
@@ -151,13 +150,11 @@ class PasswordResetConfirmView(APIView):
 
         user = _find_user(data['email'])
         if user is None:
-            return Response({'detail': 'Неверный или устаревший код.'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response(BAD_CODE, status=status.HTTP_400_BAD_REQUEST)
 
         record = EmailCode.last_for(user, EmailCode.PURPOSE_RESET)
         if record is None or not record.verify(data['code']):
-            return Response({'detail': 'Неверный или устаревший код.'},
-                            status=status.HTTP_400_BAD_REQUEST)
+            return Response(BAD_CODE, status=status.HTTP_400_BAD_REQUEST)
 
         user.set_password(data['password'])
         # Смена пароля через письмо — это ещё и доказательство владения ящиком.
