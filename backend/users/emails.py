@@ -19,7 +19,11 @@ logger = logging.getLogger(__name__)
 
 # Зелёный берём глубокий, а не кнопочный #2ECC71: на белом фоне яркий
 # оттенок читается тяжело, а в письме важен именно текст.
+# Зелёный сайта: #2ECC71 на кнопках, #1FA85C на акцентах поменьше.
+# Заголовок и цифры разведены отдельными константами — крупные цифры терпят
+# более яркий оттенок, чем строка заголовка.
 GREEN = '#1B7F45'
+GREEN_CODE = GREEN
 # Фрейм под кодом серый, а не зелёный: зелёное на зелёном сливается, а так
 # цифры выступают вперёд — они здесь единственное, что человек ищет глазами.
 GREY_FRAME = '#EFF2F0'
@@ -110,7 +114,7 @@ padding-bottom:12px">
 <tr><td align="center" style="background:{GREY_FRAME};border:1px solid {GREY_EDGE};\
 border-radius:14px;padding:22px 16px">
 <span style="font-family:{FONT};font-size:38px;line-height:1.1;font-weight:800;\
-letter-spacing:10px;color:{GREEN}">{code}</span>
+letter-spacing:10px;color:{GREEN_CODE}">{code}</span>
 </td></tr>
 </table>
 
