@@ -7,7 +7,7 @@
 
 from .actions import CommentLikeView, CommentViewSet, PostLikeView, PostSaveView
 from .catalog import (
-    DishTypeListView, MenuItemViewSet, PlaceSuggestView, RestaurantViewSet, TagListView,
+    DishGroupListView, DishTypeListView, MenuItemViewSet, PlaceSuggestView, RestaurantViewSet, TagListView,
     TaxonListView,
 )
 from .moderation import ModerationViewSet

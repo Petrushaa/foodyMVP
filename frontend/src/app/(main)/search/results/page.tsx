@@ -7,6 +7,7 @@ import { SearchResultsHeader } from "@/components/search/search-results-header";
 import {
   getCuisineCategories,
   getDishCategories,
+  getDishGroups,
   getTypeCategories,
 } from "@/lib/categories";
 import type { CategoryGroups } from "@/components/search/results-category-control";
@@ -23,6 +24,7 @@ type SearchResultsPageProps = {
     price_min?: string | string[];
     price_max?: string | string[];
     dish_type?: string | string[];
+    dish_group?: string | string[];
     cuisine?: string | string[];
     type?: string | string[];
   }>;
@@ -41,6 +43,8 @@ export default async function SearchResultsPage({
   // Категория из шапки: оси каталога идут слагами, «Блюда» — названием типа.
   const axes = {
     dish_type: getSingleSearchParam(params.dish_type),
+    // Группа блюд: «все супы» вместо перечисления борща с солянкой.
+    dish_group: getSingleSearchParam(params.dish_group),
     cuisine: getSingleSearchParam(params.cuisine),
     // Видов можно выбрать несколько — приходят через запятую.
     type: getSingleSearchParam(params.type),

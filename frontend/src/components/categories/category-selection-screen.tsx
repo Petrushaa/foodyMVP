@@ -24,6 +24,7 @@ import { CategoryModeToggle } from "@/components/categories/category-mode-toggle
 import {
   getCuisineCategories,
   getDishCategories,
+  splitByGroup,
   getTypeCategories,
   getPopularCuisineCategories,
   getPopularDishCategories,
@@ -153,8 +154,19 @@ function PopularCategoryGrid({
   }
 
   return (
-    <div className="grid grid-cols-4 gap-x-4 gap-y-4 max-[380px]:gap-x-2.5">
-      {categories.map((category) => (
+    <>
+      {splitByGroup(categories).map((section) => (
+        <section key={section.key || "rest"} className="mb-5 flex flex-col gap-2.5 last:mb-0">
+          {/* Заголовок группы: шесть десятков плиток подряд глазом не охватить.
+              Здесь он только разделяет — выбрать группу целиком можно в фильтре
+              результатов, а постят всегда конкретное блюдо, а не «супы». */}
+          {section.key && (
+            <h3 className="px-1 text-[12.5px] font-extrabold tracking-[-0.2px] text-[#5C6B62]">
+              {section.title}
+            </h3>
+          )}
+          <div className="grid grid-cols-4 gap-x-4 gap-y-4 max-[380px]:gap-x-2.5">
+      {section.items.map((category) => (
         <motion.button
           key={category.id}
           type="button"
@@ -182,7 +194,10 @@ function PopularCategoryGrid({
           </span>
         </motion.button>
       ))}
-    </div>
+          </div>
+        </section>
+      ))}
+    </>
   );
 }
 

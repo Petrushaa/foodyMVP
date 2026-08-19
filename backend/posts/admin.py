@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from .models import (
+    DishGroup,
     Tag, Taxon, DishType, Brand, Restaurant, RestaurantAlias,
     MenuItem, MenuItemAlias, MenuItemTag,
     Post, PostImage, PostStatistics, PostLike, PostSave,
@@ -74,10 +75,10 @@ class DishTypeAdmin(IconPreviewMixin, admin.ModelAdmin):
     трогать не нужно.
     """
 
-    list_display = ('icon_preview', 'emoji', 'name', 'sort_order', 'categories')
+    list_display = ('icon_preview', 'emoji', 'name', 'group', 'sort_order', 'categories')
     list_display_links = ('name',)
-    list_editable = ('emoji', 'sort_order')
-    list_filter = (HasIconFilter,)
+    list_editable = ('emoji', 'group', 'sort_order')
+    list_filter = (HasIconFilter, 'group')
     search_fields = ('name',)
     filter_horizontal = ('default_taxons',)
     list_per_page = 150
@@ -87,7 +88,7 @@ class DishTypeAdmin(IconPreviewMixin, admin.ModelAdmin):
         return ' · '.join(t.name for t in obj.default_taxons.all()) or '—'
 
     def get_queryset(self, request):
-        return super().get_queryset(request).prefetch_related('default_taxons')
+        return super().get_queryset(request).select_related('group').prefetch_related('default_taxons')
 
 
 @admin.register(Tag)
@@ -200,3 +201,18 @@ admin.site.register(PostStatistics)
 admin.site.register(PostLike)
 admin.site.register(PostSave)
 admin.site.register(CommentLike)
+
+
+@admin.register(DishGroup)
+class DishGroupAdmin(admin.ModelAdmin):
+    """Группы блюд ведут отсюда: порядок, значок, иконка."""
+
+    list_display = ('name', 'sort_order', 'dishes_count')
+    list_editable = ('sort_order',)
+    prepopulated_fields = {'slug': ('name',)}
+    search_fields = ('name',)
+
+    def dishes_count(self, obj):
+        return obj.dish_types.count()
+
+    dishes_count.short_description = 'Блюд'

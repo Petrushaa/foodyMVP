@@ -252,6 +252,39 @@ class Taxon(models.Model):
         return f'{self.get_kind_display()}: {self.name}'
 
 
+class DishGroup(models.Model):
+    """
+    Группа блюд для выбора: «Супы», «Азиатское», «Фастфуд».
+
+    Нужна ровно затем, чтобы шесть десятков блюд не сваливались в один список.
+    Признак намеренно смешанный: «Супы» — это курс, а «Фастфуд» и «Азиатское» —
+    формат и происхождение. Строгое деление по курсам даёт «Горячее» на
+    тридцать позиций, то есть ту же кашу; человек же ищет роллы среди
+    азиатского, а не среди горячего.
+
+    Отдельная таблица, а не choices в коде: справочник ведут из админки, и
+    заводя группу, там же выбирают ей порядок и иконку.
+    """
+
+    name = models.CharField(max_length=100, unique=True, verbose_name='Название группы')
+    slug = models.SlugField(max_length=100, unique=True, verbose_name='Код')
+    emoji = models.CharField(max_length=8, blank=True, verbose_name='Значок')
+    icon = models.ImageField(
+        upload_to='catalog_icons/dish-groups/', blank=True, verbose_name='Иконка',
+    )
+    sort_order = models.PositiveIntegerField(
+        null=True, blank=True, db_index=True, verbose_name='Порядок',
+    )
+
+    class Meta:
+        verbose_name = 'Группа блюд'
+        verbose_name_plural = 'Группы блюд'
+        ordering = [models.F('sort_order').asc(nulls_last=True), 'name']
+
+    def __str__(self):
+        return self.name
+
+
 class DishType(models.Model):
     """
     Справочник блюд (бургер, пицца, латте). Пользователь выбирает его при создании новой
@@ -271,6 +304,12 @@ class DishType(models.Model):
     sort_order = models.PositiveIntegerField(
         null=True, blank=True, db_index=True, verbose_name='Порядок',
     )
+    # Группа для выбора. SET_NULL, а не CASCADE: удаление группы не должно
+    # уносить блюда — они просто окажутся без группы и уедут в конец списка.
+    group = models.ForeignKey(
+        DishGroup, on_delete=models.SET_NULL, null=True, blank=True,
+        related_name='dish_types', verbose_name='Группа',
+    )
     default_taxons = models.ManyToManyField(
         Taxon, blank=True, related_name='dish_types', verbose_name='Категории по умолчанию'
     )
@@ -278,7 +317,13 @@ class DishType(models.Model):
     class Meta:
         verbose_name = 'Тип блюда'
         verbose_name_plural = 'Типы блюд'
-        ordering = [models.F('sort_order').asc(nulls_last=True), 'name']
+        # Сортируем сначала по группе, чтобы список приходил уже сгруппированным
+        # и фронту не пришлось его перекладывать.
+        ordering = [
+            models.F('group__sort_order').asc(nulls_last=True),
+            models.F('sort_order').asc(nulls_last=True),
+            'name',
+        ]
 
     def __str__(self):
         return self.name

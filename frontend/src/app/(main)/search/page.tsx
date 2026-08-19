@@ -4,6 +4,7 @@ import {
   fetchPopularTags,
   getCuisineCategories,
   getDishCategories,
+  getDishGroups,
   getTypeCategories,
 } from "@/lib/categories";
 import type { CategoryGroups } from "@/components/search/results-category-control";
