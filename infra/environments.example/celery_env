@@ -33,3 +33,10 @@ DEFAULT_FROM_EMAIL=Foody <noreply@foody.press>
 EMAIL_CODE_TTL=15m
 EMAIL_CODE_MAX_ATTEMPTS=5
 EMAIL_CODE_RESEND_COOLDOWN=60s
+
+# Чистка: сколько держать отработавшие коды и через сколько удалять
+# регистрации, которые не довели до конца (такая запись держит чужой адрес —
+# email уникален). Периодичность самой задачи — CLEANUP_INTERVAL.
+EMAIL_CODE_RETENTION=2d
+UNVERIFIED_ACCOUNT_TTL=7d
+CLEANUP_INTERVAL=24h

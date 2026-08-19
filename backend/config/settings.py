@@ -322,6 +322,19 @@ EMAIL_CODE_MAX_ATTEMPTS = get_env_int('EMAIL_CODE_MAX_ATTEMPTS', 5)
 EMAIL_CODE_RESEND_COOLDOWN = timedelta(
     seconds=get_env_time_interval('EMAIL_CODE_RESEND_COOLDOWN', '60s'),
 )
+# Сколько держать отработавшие коды. Ноль пользы после того, как код потрачен
+# или протух, — но пара суток помогает разбирать жалобы «код не приходил».
+EMAIL_CODE_RETENTION = timedelta(
+    seconds=get_env_time_interval('EMAIL_CODE_RETENTION', '2d'),
+)
+# Через сколько удалять регистрацию, которую не довели до конца.
+#
+# Дело не в мусоре, а в том, что такая запись держит адрес: email уникален, и
+# пока она есть, настоящий владелец ящика зарегистрироваться не может. Неделя —
+# запас на «указал почту, полез читать письмо, вернулся через выходные».
+UNVERIFIED_ACCOUNT_TTL = timedelta(
+    seconds=get_env_time_interval('UNVERIFIED_ACCOUNT_TTL', '7d'),
+)
 
 # Celery
 CELERY_BROKER_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
@@ -335,6 +348,12 @@ CELERY_BEAT_SCHEDULE = {
     'recalculate-menu-item-ratings': {
         'task': 'posts.tasks.recalculate_menu_item_ratings',
         'schedule': float(get_env_time_interval('RATING_RECALC_INTERVAL', '6h')),
+    },
+    # Брошенные регистрации держат чужие адреса — email уникален. Раз в сутки
+    # достаточно: неделя ожидания против суток погрешности.
+    'cleanup-email-codes': {
+        'task': 'users.tasks.cleanup_email_codes',
+        'schedule': float(get_env_time_interval('CLEANUP_INTERVAL', '24h')),
     },
     # Справочник заведений наш, значит и чистить дубли в нём нам.
     'find-restaurant-duplicates': {

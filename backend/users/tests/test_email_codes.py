@@ -304,3 +304,77 @@ class TestPasswordReset:
             'password_confirm': '12345',
         })
         assert resp.status_code == 400
+
+
+@pytest.mark.django_db
+class TestCleanup:
+    """
+    Чистка кодов и брошенных регистраций.
+
+    Проверяем в первую очередь не то, что задача удаляет, а то, что она **не**
+    удаляет: ошибка здесь стоит живого аккаунта.
+    """
+
+    def _make(self, email, *, verified, days_ago, **extra):
+        user = User.objects.create_user(
+            username=email.split('@')[0], email=email, password='Passw0rd!x',
+            email_verified=verified, **extra,
+        )
+        User.objects.filter(id=user.id).update(
+            date_joined=timezone.now() - timedelta(days=days_ago),
+        )
+        return user
+
+    def test_abandoned_registration_frees_the_address(self, db):
+        from users.tasks import cleanup_email_codes
+
+        squatter = self._make('taken@test.com', verified=False, days_ago=30)
+        cleanup_email_codes()
+
+        assert not User.objects.filter(id=squatter.id).exists()
+        # Ради этого всё и затевалось: адрес снова свободен.
+        assert User.objects.create_user(
+            username='real', email='taken@test.com', password='Passw0rd!x',
+        )
+
+    def test_recent_registration_survives(self, db):
+        """Человек мог указать почту и вернуться к письму на следующий день."""
+        from users.tasks import cleanup_email_codes
+
+        fresh = self._make('fresh@test.com', verified=False, days_ago=1)
+        cleanup_email_codes()
+        assert User.objects.filter(id=fresh.id).exists()
+
+    def test_verified_accounts_are_never_touched(self, db):
+        from users.tasks import cleanup_email_codes
+
+        old = self._make('veteran@test.com', verified=True, days_ago=500)
+        cleanup_email_codes()
+        assert User.objects.filter(id=old.id).exists()
+
+    def test_staff_is_never_deleted(self, db):
+        """
+        Суперпользователя заводят командой, и почту ему никто не подтверждал.
+        Удалить его означало бы потерять доступ к админке.
+        """
+        from users.tasks import cleanup_email_codes
+
+        admin = self._make('root@test.com', verified=False, days_ago=500,
+                           is_staff=True, is_superuser=True)
+        cleanup_email_codes()
+        assert User.objects.filter(id=admin.id).exists()
+
+    def test_spent_codes_are_removed_but_live_ones_stay(self, db, settings):
+        from users.tasks import cleanup_email_codes
+
+        user = self._make('codes@test.com', verified=True, days_ago=0)
+        spent, _ = EmailCode.issue(user, EmailCode.PURPOSE_RESET)
+        EmailCode.objects.filter(id=spent.id).update(
+            used_at=timezone.now() - settings.EMAIL_CODE_RETENTION - timedelta(hours=1),
+        )
+        live, _ = EmailCode.issue(user, EmailCode.PURPOSE_SIGNUP)
+
+        cleanup_email_codes()
+
+        assert not EmailCode.objects.filter(id=spent.id).exists()
+        assert EmailCode.objects.filter(id=live.id).exists()
