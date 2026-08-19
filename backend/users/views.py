@@ -13,7 +13,7 @@ from .serializers import (
     CodeCheckSerializer, EmailRequestSerializer, PasswordResetConfirmSerializer,
     UserRegistrationSerializer, UserSerializer,
 )
-from .services import issue_and_send
+from .services import consume_reset_ticket, issue_and_send, issue_reset_ticket
 
 logger = logging.getLogger(__name__)
 
@@ -137,14 +137,19 @@ class PasswordResetRequestView(CodeRequestView):
     purpose = EmailCode.PURPOSE_RESET
 
 
-class PasswordResetConfirmView(APIView):
-    """Смена пароля по коду из письма."""
+class PasswordResetVerifyView(APIView):
+    """
+    Проверка кода из письма — первый шаг смены пароля.
+
+    В ответ выдаёт разовый пропуск, которым авторизуется второй шаг. Так
+    человек узнаёт о неверном коде сразу, а не после того, как придумал пароль.
+    """
 
     permission_classes = (AllowAny,)
     throttle_classes = [EmailCodeThrottle]
 
     def post(self, request):
-        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer = CodeCheckSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
 
@@ -155,6 +160,29 @@ class PasswordResetConfirmView(APIView):
         record = EmailCode.last_for(user, EmailCode.PURPOSE_RESET)
         if record is None or not record.verify(data['code']):
             return Response(BAD_CODE, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response({'ticket': issue_reset_ticket(user)})
+
+
+class PasswordResetConfirmView(APIView):
+    """Новый пароль по пропуску, выданному после проверки кода."""
+
+    permission_classes = (AllowAny,)
+    throttle_classes = [EmailCodeThrottle]
+
+    def post(self, request):
+        serializer = PasswordResetConfirmSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        data = serializer.validated_data
+
+        user = consume_reset_ticket(data['ticket'])
+        if user is None:
+            # Пропуск просрочен, потрачен или подделан — начинать заново.
+            return Response(
+                {'detail': 'Время на смену пароля истекло. Запросите код заново.',
+                 'code': 'ticket_expired'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         user.set_password(data['password'])
         # Смена пароля через письмо — это ещё и доказательство владения ящиком.

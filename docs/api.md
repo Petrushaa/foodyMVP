@@ -341,7 +341,15 @@
 | `POST /users/email/verify/` | `{email, code}` | `{access, refresh}` — подтверждает почту и сразу пускает внутрь |
 | `POST /users/email/resend/` | `{email}` | отправляет код заново |
 | `POST /users/password/reset/` | `{email}` | отправляет код для смены пароля |
-| `POST /users/password/reset/confirm/` | `{email, code, password, password_confirm}` | `{access, refresh}` — меняет пароль и пускает внутрь |
+| `POST /users/password/reset/verify/` | `{email, code}` | `{ticket}` — код проверен и потрачен |
+| `POST /users/password/reset/confirm/` | `{ticket, password, password_confirm}` | `{access, refresh}` — меняет пароль и пускает внутрь |
+
+Смена пароля идёт **двумя запросами**, а не одним. Причина в порядке: код
+тратится на первом шаге, и человек узнаёт о неверном коде сразу — а не после
+того, как придумал новый пароль. Между шагами связь держит `ticket`: разовый
+пропуск, живёт 10 минут, гасится при использовании. Просроченный или уже
+потраченный пропуск даёт `400` с `code: "ticket_expired"` — значит начинать
+заново с запроса кода.
 
 Про ответы этих ручек важно знать три вещи:
 

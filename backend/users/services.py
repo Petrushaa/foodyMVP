@@ -8,6 +8,7 @@
 """
 
 import logging
+import secrets
 
 from django.conf import settings
 from django.utils import timezone
@@ -55,3 +56,46 @@ def issue_and_send(user, purpose):
         logger.exception('Очередь недоступна, отправляю письмо (%s) напрямую', purpose)
         send_code_email(user, purpose, code)
     return 0
+
+
+# ── Пропуск на смену пароля ──
+#
+# Между «код верный» и «вот новый пароль» нужен посредник: код к этому моменту
+# уже потрачен, а спрашивать его второй раз — значит показывать человеку ошибку
+# ввода кода после того, как он придумал пароль.
+#
+# Пропуск живёт в кэше, а не в подписанном токене: так он одноразовый. Кэш —
+# Redis, тот же, что под очередью, отдельного хранилища заводить не пришлось.
+
+RESET_TICKET_PREFIX = 'pwreset:'
+RESET_TICKET_TTL = 600  # 10 минут: столько нужно, чтобы придумать пароль
+
+
+def issue_reset_ticket(user):
+    """Выдаёт разовый пропуск на смену пароля."""
+    from django.core.cache import cache
+
+    token = secrets.token_urlsafe(32)
+    cache.set(f'{RESET_TICKET_PREFIX}{token}', user.id, timeout=RESET_TICKET_TTL)
+    return token
+
+
+def consume_reset_ticket(token):
+    """
+    Обменивает пропуск на пользователя и сразу гасит его.
+
+    Возвращает None, если пропуск неизвестен, просрочен или уже потрачен.
+    """
+    from django.contrib.auth import get_user_model
+    from django.core.cache import cache
+
+    if not token:
+        return None
+
+    key = f'{RESET_TICKET_PREFIX}{token}'
+    user_id = cache.get(key)
+    if user_id is None:
+        return None
+    # Гасим до смены пароля: повторно тем же пропуском воспользоваться нельзя.
+    cache.delete(key)
+    return get_user_model().objects.filter(id=user_id).first()

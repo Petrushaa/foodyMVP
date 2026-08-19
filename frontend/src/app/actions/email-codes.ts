@@ -33,8 +33,8 @@ type Result = {
  */
 async function post(path: string, body: unknown) {
     try {
-        await apiRequest(path, { method: "POST", body: JSON.stringify(body) });
-        return { status: 200, data: null as any };
+        const data = await apiRequest(path, { method: "POST", body: JSON.stringify(body) });
+        return { status: 200, data };
     } catch (e: any) {
         return { status: e?.status ?? 0, data: e?.data ?? null };
     }
@@ -89,18 +89,38 @@ export async function requestPasswordReset(email: string): Promise<Result> {
     return requestCode("/users/password/reset/", email);
 }
 
-export async function confirmPasswordReset(
+/**
+ * Первый шаг смены пароля: код в обмен на разовый пропуск.
+ *
+ * Пропуск нужен потому, что код тратится здесь же. Спрашивать его второй раз
+ * на экране пароля означало бы показывать ошибку ввода кода человеку, который
+ * уже придумал новый пароль.
+ */
+export async function verifyPasswordResetCode(
     email: string,
     code: string,
+): Promise<Result & { ticket?: string }> {
+    const { status, data } = await post("/users/password/reset/verify/", { email, code });
+    if (status === 200) return { ok: true, ticket: data?.ticket };
+    if (status === 0) return { ok: false, error: "Сервер не отвечает. Попробуйте ещё раз." };
+    return { ok: false, error: explainApiError(data, "Неверный или устаревший код.") };
+}
+
+/** Второй шаг: новый пароль по пропуску. */
+export async function confirmPasswordReset(
+    email: string,
+    ticket: string,
     password: string,
 ): Promise<Result> {
     const { status, data } = await post("/users/password/reset/confirm/", {
-        email,
-        code,
+        ticket,
         password,
         password_confirm: password,
     });
     if (status === 200) return signInAfterCode(email, password);
     if (status === 0) return { ok: false, error: "Сервер не отвечает. Попробуйте ещё раз." };
-    return { ok: false, error: explainApiError(data, "Неверный или устаревший код.") };
+    return {
+        ok: false,
+        error: explainApiError(data, "Не удалось сменить пароль. Запросите код заново."),
+    };
 }

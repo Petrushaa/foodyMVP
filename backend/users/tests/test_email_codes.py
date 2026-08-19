@@ -204,8 +204,21 @@ def member(db):
     )
 
 
+def reset_ticket(api_client, email, code):
+    """Первый шаг: код в обмен на пропуск."""
+    return api_client.post(reverse('password-reset-verify'), {
+        'email': email, 'code': code,
+    })
+
+
 @pytest.mark.django_db
 class TestPasswordReset:
+    """
+    Сброс идёт двумя шагами: сначала код, потом новый пароль. Разделение не
+    косметическое — на одном экране человек узнавал о неверном коде только
+    после того, как придумал пароль.
+    """
+
     def test_reset_sends_code(self, api_client, member):
         resp = api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
         assert resp.status_code == 200
@@ -222,11 +235,30 @@ class TestPasswordReset:
         assert known.data['detail'] == 'Если такой адрес есть, мы отправили на него код.'
         assert len(mail.outbox) == 0
 
-    def test_password_changes_by_code(self, api_client, member):
+    def test_code_is_checked_before_the_password_is_asked(self, api_client, member):
         api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        resp = reset_ticket(api_client, 'member@test.com', code_from_mail())
+
+        assert resp.status_code == 200
+        assert resp.data['ticket']
+
+    def test_wrong_code_stops_at_the_first_step(self, api_client, member):
+        """Ради этого шаги и разделены: ошибка видна до ввода пароля."""
+        api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        code = code_from_mail()
+        wrong = '000000' if code != '000000' else '111111'
+
+        resp = reset_ticket(api_client, 'member@test.com', wrong)
+
+        assert resp.status_code == 400
+        assert 'ticket' not in resp.data
+
+    def test_password_changes_by_ticket(self, api_client, member):
+        api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        ticket = reset_ticket(api_client, 'member@test.com', code_from_mail()).data['ticket']
+
         resp = api_client.post(reverse('password-reset-confirm'), {
-            'email': 'member@test.com',
-            'code': code_from_mail(),
+            'ticket': ticket,
             'password': 'BrandNewPass9!',
             'password_confirm': 'BrandNewPass9!',
         })
@@ -240,11 +272,47 @@ class TestPasswordReset:
         })
         assert login.status_code == 200
 
+    def test_ticket_works_only_once(self, api_client, member):
+        """
+        Пропуск — разовый. Иначе перехваченный в истории браузера или в логах
+        прокси, он оставался бы ключом от аккаунта на все десять минут.
+        """
+        api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        ticket = reset_ticket(api_client, 'member@test.com', code_from_mail()).data['ticket']
+        body = {
+            'ticket': ticket,
+            'password': 'BrandNewPass9!',
+            'password_confirm': 'BrandNewPass9!',
+        }
+        api_client.post(reverse('password-reset-confirm'), body)
+
+        resp = api_client.post(reverse('password-reset-confirm'), body)
+        assert resp.status_code == 400
+        assert resp.data['code'] == 'ticket_expired'
+
+    def test_made_up_ticket_is_rejected(self, api_client, member):
+        resp = api_client.post(reverse('password-reset-confirm'), {
+            'ticket': 'взял-и-придумал',
+            'password': 'BrandNewPass9!',
+            'password_confirm': 'BrandNewPass9!',
+        })
+        assert resp.status_code == 400
+        member.refresh_from_db()
+        assert member.check_password('OldPassw0rd!')
+
+    def test_code_cannot_be_reused_for_a_second_ticket(self, api_client, member):
+        api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        code = code_from_mail()
+        assert reset_ticket(api_client, 'member@test.com', code).status_code == 200
+
+        # Код потрачен на первом шаге — второй пропуск по нему не получить.
+        assert reset_ticket(api_client, 'member@test.com', code).status_code == 400
+
     def test_old_password_stops_working(self, api_client, member):
         api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        ticket = reset_ticket(api_client, 'member@test.com', code_from_mail()).data['ticket']
         api_client.post(reverse('password-reset-confirm'), {
-            'email': 'member@test.com',
-            'code': code_from_mail(),
+            'ticket': ticket,
             'password': 'BrandNewPass9!',
             'password_confirm': 'BrandNewPass9!',
         })
@@ -253,42 +321,20 @@ class TestPasswordReset:
         })
         assert resp.status_code == 401
 
-    def test_wrong_code_keeps_password(self, api_client, member):
-        api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
-        code = code_from_mail()
-        wrong = '000000' if code != '000000' else '111111'
-
-        resp = api_client.post(reverse('password-reset-confirm'), {
-            'email': 'member@test.com',
-            'code': wrong,
-            'password': 'BrandNewPass9!',
-            'password_confirm': 'BrandNewPass9!',
-        })
-        assert resp.status_code == 400
-        member.refresh_from_db()
-        assert member.check_password('OldPassw0rd!')
-
-    def test_signup_code_does_not_reset_password(self, api_client, registered):
+    def test_signup_code_does_not_open_the_password_reset(self, api_client, registered):
         """
         Код подтверждения почты не должен работать как код сброса пароля:
         назначения разделены, иначе одно письмо открывает оба сценария.
         """
-        signup_code = code_from_mail()
-        resp = api_client.post(reverse('password-reset-confirm'), {
-            'email': 'newbie@test.com',
-            'code': signup_code,
-            'password': 'BrandNewPass9!',
-            'password_confirm': 'BrandNewPass9!',
-        })
+        resp = reset_ticket(api_client, 'newbie@test.com', code_from_mail())
         assert resp.status_code == 400
-        registered.refresh_from_db()
-        assert registered.check_password('Sup3rSecret!pass')
 
     def test_passwords_must_match(self, api_client, member):
         api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        ticket = reset_ticket(api_client, 'member@test.com', code_from_mail()).data['ticket']
+
         resp = api_client.post(reverse('password-reset-confirm'), {
-            'email': 'member@test.com',
-            'code': code_from_mail(),
+            'ticket': ticket,
             'password': 'BrandNewPass9!',
             'password_confirm': 'Different9!',
         })
@@ -297,11 +343,10 @@ class TestPasswordReset:
 
     def test_weak_password_rejected(self, api_client, member):
         api_client.post(reverse('password-reset'), {'email': 'member@test.com'})
+        ticket = reset_ticket(api_client, 'member@test.com', code_from_mail()).data['ticket']
+
         resp = api_client.post(reverse('password-reset-confirm'), {
-            'email': 'member@test.com',
-            'code': code_from_mail(),
-            'password': '12345',
-            'password_confirm': '12345',
+            'ticket': ticket, 'password': '12345', 'password_confirm': '12345',
         })
         assert resp.status_code == 400
 

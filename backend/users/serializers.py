@@ -216,9 +216,16 @@ class CodeCheckSerializer(EmailRequestSerializer):
     code = serializers.CharField(min_length=6, max_length=6, trim_whitespace=True)
 
 
-class PasswordResetConfirmSerializer(CodeCheckSerializer):
-    """Смена пароля по коду из письма."""
+class PasswordResetConfirmSerializer(serializers.Serializer):
+    """
+    Новый пароль по пропуску.
 
+    Кода здесь уже нет: его проверили шагом раньше и потратили. Спрашивать его
+    второй раз означало бы показывать ошибку ввода кода человеку, который к
+    этому моменту успел придумать пароль.
+    """
+
+    ticket = serializers.CharField(write_only=True, trim_whitespace=True)
     password = serializers.CharField(write_only=True, validators=[validate_password])
     password_confirm = serializers.CharField(write_only=True)
 
