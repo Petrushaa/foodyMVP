@@ -39,36 +39,34 @@ export async function registerUser(formData: FormData) {
         return { success: true, needsVerification: true };
     } catch (error: any) {
         console.error("Registration error:", error);
-        let message = "Ошибка при регистрации";
-        
-        try {
-            // Пытаемся распарсить детализированные ошибки от Django
-            const errorObj = JSON.parse(error.message);
-            if (typeof errorObj === 'object') {
-                const FIELD_LABELS: Record<string, string> = {
-                    username: "Логин",
-                    email: "Email",
-                    password: "Пароль",
-                    password_confirm: "Подтверждение пароля",
-                    full_name: "Имя",
-                    city: "Город",
-                    non_field_errors: "Ошибка"
-                };
 
-                const details = Object.entries(errorObj)
-                    .map(([key, value]) => {
-                        const label = FIELD_LABELS[key] || key;
-                        const val = Array.isArray(value) ? value[0] : value;
-                        return `${label}: ${val}`;
-                    })
-                    .join(". ");
-                message = details;
-            }
-        } catch (e) {
-            message = error.message || message;
+        // Django отвечает ошибками по полям: {"email": ["уже занят"], …}.
+        // Раньше их доставали через JSON.parse(error.message) — текст ошибки
+        // собирали строкой и тут же разбирали обратно. Теперь тело ответа
+        // приходит в самой ошибке.
+        const FIELD_LABELS: Record<string, string> = {
+            username: "Логин",
+            email: "Email",
+            password: "Пароль",
+            password_confirm: "Подтверждение пароля",
+            full_name: "Имя",
+            city: "Город",
+            non_field_errors: "Ошибка",
+        };
+
+        const data = error?.data;
+        if (data && typeof data === "object") {
+            const details = Object.entries(data)
+                .map(([key, value]) => {
+                    const label = FIELD_LABELS[key] || key;
+                    const val = Array.isArray(value) ? value[0] : value;
+                    return `${label}: ${val}`;
+                })
+                .join(". ");
+            if (details) return { error: details };
         }
-        
-        return { error: message };
+
+        return { error: error?.message || "Ошибка при регистрации" };
     }
 }
 

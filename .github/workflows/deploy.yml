@@ -61,6 +61,20 @@ jobs:
             --entrypoint pytest \
             "$IMAGE_BACKEND:${{ github.sha }}" -q
 
+      # Тесты фронта гоняем на раннере, а не в образе: боевой образ собран
+      # без dev-зависимостей, а тащить их туда ради CI — раздувать прод.
+      # Версия та же, что в Dockerfile фронта: тесты должны падать там же,
+      # где упадёт прод, а не на разнице рантаймов.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Vitest
+        run: npm ci && npm test
+        working-directory: ./frontend
+
       - name: Build frontend
         run: |
           docker build \

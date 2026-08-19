@@ -2,6 +2,7 @@
 
 import { signIn } from "@/auth";
 import { explainApiError } from "@/lib/api-errors";
+import { apiRequest } from "@/lib/api";
 
 /**
  * Подтверждение почты и сброс пароля.
@@ -14,11 +15,6 @@ import { explainApiError } from "@/lib/api-errors";
  * входе. Нигде не сохраняется: перезагрузил страницу — вводи заново.
  */
 
-const API_URL =
-    process.env.INTERNAL_API_URL ||
-    process.env.NEXT_PUBLIC_API_URL ||
-    "http://localhost:8000/api/v1";
-
 type Result = {
     ok: boolean;
     /** Текст для человека. */
@@ -29,21 +25,20 @@ type Result = {
     needsLogin?: boolean;
 };
 
+/**
+ * Запрос к бэкенду, где важен не только текст ошибки, но и её статус.
+ *
+ * Возвращает статус, а не бросает: здесь 429 и 400 — не сбои, а часть
+ * разговора. На 429 показываем отсчёт, на 400 — «неверный код».
+ */
 async function post(path: string, body: unknown) {
     try {
-        const res = await fetch(`${API_URL}${path}`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(body),
-            cache: "no-store",
-        });
-        const data = await res.json().catch(() => null);
-        return { status: res.status, data };
-    } catch {
-        return { status: 0, data: null };
+        await apiRequest(path, { method: "POST", body: JSON.stringify(body) });
+        return { status: 200, data: null as any };
+    } catch (e: any) {
+        return { status: e?.status ?? 0, data: e?.data ?? null };
     }
 }
-
 
 /** Открывает сессию после того, как код подтвердил владение ящиком. */
 async function signInAfterCode(email: string, password?: string): Promise<Result> {

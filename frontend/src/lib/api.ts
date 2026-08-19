@@ -1,4 +1,5 @@
 import { Dish } from "./data";
+import { ApiError, explainApiError } from "./api-errors";
 
 const isServer = typeof window === 'undefined';
 // Сервер (SSR / server actions) ходит на бэкенд по внутреннему docker-хосту.
@@ -23,27 +24,32 @@ export async function apiRequest(endpoint: string, options: RequestInit = {}) {
         headers["Content-Type"] = "application/json";
     }
 
-    const response = await fetch(url, {
-        ...options,
-        headers,
-        cache: "no-store", // disable nextjs fetch caching just in case
-    });
+    let response: Response;
+    try {
+        response = await fetch(url, {
+            ...options,
+            headers,
+            cache: "no-store", // disable nextjs fetch caching just in case
+        });
+    } catch (cause) {
+        // До сервера не достучались: статус 0 отличает это от любого ответа.
+        throw new ApiError(0, null, "Сервер не отвечает");
+    }
 
     if (!response.ok) {
+        const data = await response.json().catch(() => null);
+
+        // Текст "UNAUTHORIZED" сохранён намеренно: по нему страницы отправляют
+        // на вход (`e.message === "UNAUTHORIZED"`) в полудюжине мест.
         if (response.status === 401) {
-            // Если токен невалиден или просрочен (401 Unauthorized), 
-            // можем выбросить специальную ошибку или вернуть null/перенаправить:
-            throw new Error("UNAUTHORIZED");
+            throw new ApiError(401, data, "UNAUTHORIZED");
         }
-        
-        let errorMessage = "Произошла ошибка при запросе";
-        try {
-            const errorData = await response.json();
-            errorMessage = errorData.detail || errorData.message || JSON.stringify(errorData);
-        } catch (e) {
-            // If not JSON
-        }
-        throw new Error(errorMessage);
+
+        throw new ApiError(
+            response.status,
+            data,
+            explainApiError(data, "Произошла ошибка при запросе"),
+        );
     }
 
     // Handle 204 No Content
