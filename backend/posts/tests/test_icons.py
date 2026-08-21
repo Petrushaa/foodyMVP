@@ -160,12 +160,12 @@ class TestApplyCatalogOrder:
     def test_group_order_sets_the_sections(self, tmp_path, api_client):
         """Порядок разделов тоже едет из файла, а не живёт только в базе."""
         path = tmp_path / 'order.txt'
-        path.write_text('[dish-groups]\nsoups\nasian\n', encoding='utf-8')
+        path.write_text('[dish-groups]\nsoups\nrolls\n', encoding='utf-8')
 
         call_command('apply_catalog_order', path=str(path))
 
         groups = [g['slug'] for g in api_client.get('/api/v1/dish-groups/').data[:2]]
-        assert groups == ['soups', 'asian']
+        assert groups == ['soups', 'rolls']
 
     def test_dishes_of_one_group_stay_together(self, order_file, api_client):
         """

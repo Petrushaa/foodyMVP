@@ -27,7 +27,7 @@ class TestDishGroupCatalog:
         assert resp.status_code == 200
 
         slugs = [g['slug'] for g in resp.data]
-        assert slugs[:3] == ['pizza-pasta', 'asian', 'fastfood']
+        assert slugs[:3] == ['pizza-pasta', 'rolls', 'street']
         assert 'drinks' in slugs
 
     def test_dish_list_arrives_already_grouped(self, api_client):
@@ -87,7 +87,7 @@ class TestDishGroupFilter:
         Позиция входит ровно в одну группу, поэтому несколько групп — это «или».
         «И» здесь всегда давало бы пустую выдачу.
         """
-        resp = api_client.get(reverse('menu-item-list'), {'dish_group': 'soups,asian'})
+        resp = api_client.get(reverse('menu-item-list'), {'dish_group': 'soups,rolls'})
 
         names = {m['name'] for m in resp.data['results']}
         assert {'Борщ домашний', 'Филадельфия'} <= names
