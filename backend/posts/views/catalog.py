@@ -15,12 +15,9 @@ from rest_framework.generics import ListAPIView
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from ..models import (
-    DishGroup, DishType, MenuItem, Restaurant, Tag, Taxon, normalize_name,
-)
+from ..models import DishType, MenuItem, Restaurant, Tag, Taxon, normalize_name
 from ..serializers import (
-    DishGroupSerializer, DishTypeSerializer, MenuItemDetailSerializer,
-    MenuItemSerializer,
+    DishTypeSerializer, MenuItemDetailSerializer, MenuItemSerializer,
     PostListSerializer, RestaurantSerializer, TagSerializer, TaxonSerializer,
 )
 from ..services.restaurants import search_restaurants
@@ -32,19 +29,7 @@ class DishTypeListView(ListAPIView):
 
     serializer_class = DishTypeSerializer
     permission_classes = [permissions.AllowAny]
-    queryset = DishType.objects.select_related('group').prefetch_related('default_taxons').all()
-    pagination_class = None
-
-
-class DishGroupListView(ListAPIView):
-    """
-    Группы блюд. Фронт рисует по ним заголовки в списке выбора, а в поиске —
-    чипы «все супы»: выбрать группу целиком, не перечисляя блюда.
-    """
-
-    serializer_class = DishGroupSerializer
-    permission_classes = [permissions.AllowAny]
-    queryset = DishGroup.objects.all()
+    queryset = DishType.objects.prefetch_related('default_taxons').all()
     pagination_class = None
 
 
@@ -169,15 +154,6 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
         dish_type = (self.request.query_params.get('dish_type') or '').strip()
         if dish_type:
             queryset = queryset.filter(dish_type__name__iexact=dish_type)
-
-        # Группа целиком: «хочу супы» вместо перечисления борща, солянки и
-        # окрошки. Несколько групп — это «или», как и у кухни: позиция входит
-        # ровно в одну группу, и «и» здесь дало бы пустую выдачу.
-        raw = self.request.query_params.get('dish_group')
-        if raw:
-            slugs = [slug.strip() for slug in raw.split(',') if slug.strip()]
-            if slugs:
-                queryset = queryset.filter(dish_type__group__slug__in=slugs)
 
         for param, lookup in (('price_min', 'gte'), ('price_max', 'lte')):
             value = self.request.query_params.get(param)

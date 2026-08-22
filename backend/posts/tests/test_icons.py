@@ -92,27 +92,19 @@ class TestCatalogOrder:
     """
 
     def test_unset_order_keeps_alphabet(self):
-        """Внутри группы: у блюд без порядка остаётся алфавит."""
-        DishType.objects.update(sort_order=None)
-        soups = DishType.objects.filter(group__slug='soups')
-        names = list(soups.values_list('name', flat=True))
+        names = list(DishType.objects.values_list('name', flat=True)[:5])
         assert names == sorted(names)
 
     def test_explicit_order_comes_first(self, burger):
-        """
-        Порядок считается внутри группы: список выбора разбит на разделы, и
-        группа всегда главнее. Поднять бургер выше пиццы, не трогая группы,
-        нельзя — они в разных разделах.
-        """
-        fastfood = DishType.objects.filter(group=burger.group)
-        fastfood.update(sort_order=None)
-        burger.sort_order = 1
+        pizza = DishType.objects.get(name='Пицца')
+        pizza.sort_order = 1
+        pizza.save(update_fields=['sort_order'])
+        burger.sort_order = 2
         burger.save(update_fields=['sort_order'])
 
-        names = list(fastfood.values_list('name', flat=True)[:3])
+        names = list(DishType.objects.values_list('name', flat=True)[:3])
 
-        assert names[0] == 'Бургер', 'заданный порядок поднимает блюдо в разделе'
-        assert names[1:] == sorted(names[1:]), 'остальные — по алфавиту'
+        assert names[:2] == ['Пицца', 'Бургер']
         assert names[2] != 'Пицца', 'остальные идут следом по алфавиту'
 
     def test_order_reaches_api(self, api_client):
@@ -151,38 +143,19 @@ class TestApplyCatalogOrder:
     def test_applies_listed_order(self, order_file, api_client):
         call_command('apply_catalog_order', path=str(order_file))
 
-        # Позиция считается по строке файла; на экране она работает внутри
-        # своего раздела, потому что группа в сортировке главнее.
-        assert DishType.objects.get(name='Пицца').sort_order == 1
-        assert DishType.objects.get(name='Бургер').sort_order == 2
+        names = [d['name'] for d in api_client.get('/api/v1/dish-types/').data[:2]]
+        assert names == ['Пицца', 'Бургер']
         assert api_client.get('/api/v1/taxons/?kind=cuisine').data[0]['slug'] == 'japanese'
 
-    def test_group_order_sets_the_sections(self, tmp_path, api_client):
-        """Порядок разделов тоже едет из файла, а не живёт только в базе."""
-        path = tmp_path / 'order.txt'
-        path.write_text('[dish-groups]\nsoups\nrolls\n', encoding='utf-8')
-
-        call_command('apply_catalog_order', path=str(path))
-
-        groups = [g['slug'] for g in api_client.get('/api/v1/dish-groups/').data[:2]]
-        assert groups == ['soups', 'rolls']
-
-    def test_dishes_of_one_group_stay_together(self, order_file, api_client):
-        """
-        Фронт рисует заголовок над подряд идущими блюдами. Разорви файл порядка
-        группу — и раздел на экране задвоится.
-        """
+    def test_unlisted_stay_alphabetical(self, order_file, api_client):
         call_command('apply_catalog_order', path=str(order_file))
 
-        seen, order = set(), []
-        for dish in api_client.get('/api/v1/dish-types/').data:
-            if dish['group'] not in seen:
-                seen.add(dish['group'])
-                order.append(dish['group'])
-            else:
-                assert order[-1] == dish['group'], 'группа разорвана'
+        rest = [d['name'] for d in api_client.get('/api/v1/dish-types/').data[2:6]]
+        assert rest == sorted(rest)
 
     def test_dry_run_changes_nothing(self, order_file):
+        # Сравниваем с прежним значением, а не с пустым: порядок блюдам
+        # проставляют миграции наполнения каталога.
         before = DishType.objects.get(name='Пицца').sort_order
 
         call_command('apply_catalog_order', path=str(order_file), dry_run=True)

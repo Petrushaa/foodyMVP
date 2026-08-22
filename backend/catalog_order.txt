@@ -9,9 +9,8 @@
 #     по алфавиту;
 #   * у блюд пишется название, у категорий — код (slug), как в папке иконок;
 #   * порядок категорий считается внутри своей оси, оси независимы;
-#   * порядок блюд считается ВНУТРИ своей группы: список выбора разбит
-#     на разделы, и группа всегда главнее. Порядок самих разделов —
-#     в секции [dish-groups];
+#   * в [type]сначала идут категории блюда (фастфуд, супы, паста),
+#     затем подача, диета и основа — так их и рисует интерфейс;
 #   * строки после # — комментарии, пустые строки игнорируются.
 #
 # Команда только расставляет перечисленное и НЕ трогает остальное, поэтому
@@ -38,32 +37,6 @@
 # [diet]
 # vegetarian
 
-[dish-types]
-
-[cuisine]
-
-[format]
-
-[form]
-
-[diet]
-
-
-[dish-groups]
-pizza-pasta
-rolls
-street
-salads
-grill
-dough
-soups
-breakfast
-noodles
-desserts
-drinks
-
-# Блюда — порядок внутри своей группы. Перечислены все шестьдесят; команда
-# молча пропускает те, что ещё не заведены, и место за ними сохраняется.
 [dish-types]
 Пицца
 Паста
@@ -125,3 +98,62 @@ drinks
 Кофе
 Лимонад
 Смузи
+Ребрышки
+Синнабон
+
+[cuisine]
+russian
+italian
+japanese
+georgian
+american
+uzbek
+turkish
+chinese
+korean
+thai
+middle-eastern
+mexican
+armenian
+indian
+greek
+vietnamese
+french
+spanish
+azerbaijani
+european
+caucasian
+pan-asian
+
+[type]
+fastfood
+streetfood
+pasta-noodles
+dumplings
+fish
+meat
+soups
+salads
+snacks
+hot
+sides
+breakfast
+bakery-goods
+desserts
+drinks
+homestyle
+spicy
+for-company
+takeaway
+vegetarian
+vegan
+healthy
+lenten
+gluten-free
+lactose-free
+halal
+kids
+chicken
+seafood
+cheese
+vegetables

@@ -12,11 +12,6 @@ export type FoodCategory = {
   /** URL картинки из справочника. Пусто — рисуется эмодзи. */
   icon?: string;
   mode: CategoryMode;
-  /** Код группы блюда: по нему список разбивается на разделы. */
-  group?: string;
-  groupName?: string;
-  /** Это сама группа, а не блюдо. Выбор такой записи берёт группу целиком. */
-  isGroup?: boolean;
 };
 
 const DISH_CATEGORIES: FoodCategory[] = [
@@ -118,21 +113,7 @@ const PLACE_CATEGORIES: PlaceCategory[] = [
  * экран не должен оказаться пустым.
  */
 
-type ApiDishType = {
-  id: number;
-  name: string;
-  emoji?: string;
-  icon?: string | null;
-  group?: string | null;
-  group_name?: string | null;
-};
-type ApiDishGroup = {
-  id: number;
-  name: string;
-  slug: string;
-  emoji?: string;
-  icon?: string | null;
-};
+type ApiDishType = { id: number; name: string; emoji?: string; icon?: string | null };
 type ApiTaxon = {
   id: number;
   kind: string;
@@ -155,8 +136,6 @@ async function loadDishTypes(): Promise<FoodCategory[] | null> {
       emoji: item.emoji || "🍽️",
       icon: fixMediaUrl(item.icon) || undefined,
       mode: "dishes" as const,
-      group: item.group || undefined,
-      groupName: item.group_name || undefined,
     }));
   } catch {
     return null;
@@ -182,54 +161,6 @@ async function loadTaxons(kind: string, mode: CategoryMode): Promise<FoodCategor
 
 export async function getDishCategories() {
   return (await loadDishTypes()) ?? cloneCategories(DISH_CATEGORIES);
-}
-
-/**
- * Группы блюд: «Супы», «Азиатское», «Фастфуд».
- *
- * Нужны и как заголовки разделов, и как самостоятельный выбор: человек, которому
- * хочется супа, не должен перечислять борщ, солянку и окрошку по одному.
- */
-export async function getDishGroups(): Promise<FoodCategory[]> {
-  try {
-    const data = await apiRequest("/dish-groups/");
-    const list: ApiDishGroup[] = Array.isArray(data) ? data : (data?.results ?? []);
-    return list.map((item) => ({
-      id: item.slug,
-      label: item.name,
-      emoji: item.emoji || "🍽️",
-      icon: fixMediaUrl(item.icon) || undefined,
-      mode: "dishes" as const,
-      group: item.slug,
-      groupName: item.name,
-      isGroup: true,
-    }));
-  } catch {
-    // Без групп список просто останется плоским — это хуже, но рабочее.
-    return [];
-  }
-}
-
-/**
- * Разбивает плоский список блюд на разделы по группам.
- *
- * Порядок берётся из самого списка: бэкенд отдаёт его отсортированным, и
- * пересортировка здесь только сломала бы курируемый порядок.
- */
-export function splitByGroup<T extends { group?: string; groupName?: string }>(
-  items: T[],
-): { key: string; title: string; items: T[] }[] {
-  const sections: { key: string; title: string; items: T[] }[] = [];
-  for (const item of items) {
-    const key = item.group ?? "";
-    const last = sections[sections.length - 1];
-    if (last && last.key === key) {
-      last.items.push(item);
-    } else {
-      sections.push({ key, title: item.groupName ?? "Остальное", items: [item] });
-    }
-  }
-  return sections;
 }
 
 export async function getCuisineCategories() {

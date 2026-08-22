@@ -8,8 +8,7 @@ from django.urls import include, path
 from rest_framework.routers import DefaultRouter
 
 from .views import (
-    CommentLikeView, CommentViewSet, DishGroupListView, DishTypeListView,
-    MenuItemViewSet, ModerationViewSet,
+    CommentLikeView, CommentViewSet, DishTypeListView, MenuItemViewSet, ModerationViewSet,
     PlaceSuggestView, PostLikeView, PostSaveView, PostViewSet,
     RestaurantViewSet, TagListView, TaxonListView,
 )
@@ -24,7 +23,6 @@ router.register(r'moderation', ModerationViewSet, basename='moderation')
 urlpatterns = [
     # Справочники для формы создания поста
     path('dish-types/', DishTypeListView.as_view(), name='dish-type-list'),
-    path('dish-groups/', DishGroupListView.as_view(), name='dish-group-list'),
     path('taxons/', TaxonListView.as_view(), name='taxon-list'),
     path('tags/', TagListView.as_view(), name='tag-list'),
     # Подсказки заведений из нашего справочника

@@ -10,7 +10,7 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from posts.models import DishGroup, DishType, Taxon
+from posts.models import DishType, Taxon
 
 DEFAULT_NAME = 'catalog.xlsx'
 
@@ -24,22 +24,18 @@ def _cuisine_of(dish):
 
 def collect():
     """Три листа: блюда с группой и кухней, кухни, виды."""
-    dishes = [('№', 'Группа', 'Блюдо', 'Значок', 'Кухня', 'Иконка')]
-    position = 0
-    for group in DishGroup.objects.prefetch_related('dish_types__default_taxons'):
-        for dish in group.dish_types.all():
-            position += 1
-            dishes.append((
-                position, group.name, dish.name, dish.emoji,
-                _cuisine_of(dish), 'да' if dish.icon else 'нет',
-            ))
-    # Блюдо без группы в интерфейс не попадёт — в таблице оно должно быть
-    # видно, иначе пропажу замечают только по жалобе.
-    for dish in DishType.objects.filter(group=None).prefetch_related('default_taxons'):
-        position += 1
+    dishes = [('№', 'Блюдо', 'Значок', 'Кухня', 'Виды', 'Иконка')]
+    for position, dish in enumerate(
+        DishType.objects.prefetch_related('default_taxons'), start=1,
+    ):
+        # Виды перечисляем строкой: их у блюда несколько, и в таблице удобнее
+        # видеть весь набор сразу, чем разносить по столбцам.
+        kinds = ' · '.join(
+            t.name for t in dish.default_taxons.all() if t.kind == Taxon.KIND_TYPE
+        )
         dishes.append((
-            position, 'БЕЗ ГРУППЫ', dish.name, dish.emoji,
-            _cuisine_of(dish), 'да' if dish.icon else 'нет',
+            position, dish.name, dish.emoji, _cuisine_of(dish),
+            kinds or '—', 'да' if dish.icon else 'нет',
         ))
 
     cuisines = [('№', 'Кухня', 'Код', 'Значок', 'Блюд', 'Иконка')]

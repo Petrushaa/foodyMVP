@@ -7,7 +7,6 @@ import { SearchResultsHeader } from "@/components/search/search-results-header";
 import {
   getCuisineCategories,
   getDishCategories,
-  getDishGroups,
   getTypeCategories,
 } from "@/lib/categories";
 import type { CategoryGroups } from "@/components/search/results-category-control";
@@ -24,7 +23,6 @@ type SearchResultsPageProps = {
     price_min?: string | string[];
     price_max?: string | string[];
     dish_type?: string | string[];
-    dish_group?: string | string[];
     cuisine?: string | string[];
     type?: string | string[];
   }>;
@@ -43,8 +41,6 @@ export default async function SearchResultsPage({
   // Категория из шапки: оси каталога идут слагами, «Блюда» — названием типа.
   const axes = {
     dish_type: getSingleSearchParam(params.dish_type),
-    // Группа блюд: «все супы» вместо перечисления борща с солянкой.
-    dish_group: getSingleSearchParam(params.dish_group),
     cuisine: getSingleSearchParam(params.cuisine),
     // Видов можно выбрать несколько — приходят через запятую.
     type: getSingleSearchParam(params.type),
@@ -54,22 +50,13 @@ export default async function SearchResultsPage({
   const accessToken: string | null = session?.user?.accessToken ?? null;
 
   // Три группы для фильтра в шапке: блюда, кухни и виды.
-  const [dishes, cuisines, types, dishGroups] = await Promise.all([
+  const [dishes, cuisines, types] = await Promise.all([
     getDishCategories(),
     getCuisineCategories(),
     getTypeCategories(),
-    getDishGroups(),
   ]);
   const categoryGroups: CategoryGroups = {
-    dishes: dishes.map((c) => ({
-      id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon,
-      group: c.group, groupName: c.groupName,
-    })),
-    // Группа ищется целиком и уходит своим параметром — отсюда isGroup.
-    dishGroups: dishGroups.map((c) => ({
-      id: `dgrp-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon,
-      group: c.group, groupName: c.groupName, isGroup: true,
-    })),
+    dishes: dishes.map((c) => ({ id: `dish-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
     cuisines: cuisines.map((c) => ({ id: `cui-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
     types: types.map((c) => ({ id: `type-${c.id}`, value: c.id, label: c.label, emoji: c.emoji, icon: c.icon })),
   };

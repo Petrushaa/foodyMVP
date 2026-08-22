@@ -24,7 +24,6 @@ import { CategoryModeToggle } from "@/components/categories/category-mode-toggle
 import {
   getCuisineCategories,
   getDishCategories,
-  splitByGroup,
   getTypeCategories,
   getPopularCuisineCategories,
   getPopularDishCategories,
@@ -138,17 +137,9 @@ function CategorySkeleton() {
 function PopularCategoryGrid({
   categories,
   onSelect,
-  showGroups = false,
 }: {
   categories: FoodCategory[];
   onSelect: (category: FoodCategory) => void;
-  /**
-   * Разбивать ли на разделы по группам.
-   *
-   * В подборке «популярное» не разбиваем: там первые несколько блюд, и
-   * заголовок «Пицца и паста» над ними соврал бы — это не вся группа.
-   */
-  showGroups?: boolean;
 }) {
   const shouldReduceMotion = useReducedMotion();
 
@@ -162,27 +153,8 @@ function PopularCategoryGrid({
   }
 
   return (
-    <>
-      {(showGroups ? splitByGroup(categories) : [{ key: "", title: "", items: categories }]).map((section) => (
-        <section key={section.key || "rest"} className="mb-7 flex flex-col gap-3 last:mb-0">
-          {/* Разделитель, а не подпись: шесть десятков плиток подряд глазом не
-              охватить. Линия справа от названия отделяет разделы друг от друга
-              заметнее, чем один только текст среди крупных плиток.
-              Выбрать группу целиком можно в фильтре результатов; здесь постят
-              конкретное блюдо, а не «супы». */}
-          {section.key && (
-            <div className="flex items-center gap-2.5">
-              <h3 className="shrink-0 text-[15px] leading-none font-extrabold tracking-[-0.3px] text-[#15291C]">
-                {section.title}
-              </h3>
-              <span className="text-[12px] leading-none font-bold text-[#8A958E] tabular-nums">
-                {section.items.length}
-              </span>
-              <span className="h-px flex-1 bg-[rgba(20,40,28,0.12)]" />
-            </div>
-          )}
-          <div className="grid grid-cols-4 gap-x-4 gap-y-4 max-[380px]:gap-x-2.5">
-      {section.items.map((category) => (
+    <div className="grid grid-cols-4 gap-x-4 gap-y-4 max-[380px]:gap-x-2.5">
+      {categories.map((category) => (
         <motion.button
           key={category.id}
           type="button"
@@ -210,10 +182,7 @@ function PopularCategoryGrid({
           </span>
         </motion.button>
       ))}
-          </div>
-        </section>
-      ))}
-    </>
+    </div>
   );
 }
 
@@ -514,7 +483,6 @@ export function CategorySelectionScreen({
                 <PopularCategoryGrid
                   categories={currentCategories}
                   onSelect={handleSelectCategory}
-                  showGroups
                 />
               ) : loadState.status === "loading" ? (
                 <CategorySkeleton />

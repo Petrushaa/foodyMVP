@@ -2,7 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, ChevronRight, Search } from "lucide-react";
+import { ArrowLeft, Search } from "lucide-react";
 
 import { CategoryModeToggle } from "@/components/categories/category-mode-toggle";
 import { GlassSurface } from "@/components/feed/glass-surface";
@@ -17,10 +17,8 @@ import {
   TAB_PARAM,
   type CategoryChip,
   type CategoryGroups,
-  DISH_GROUP_PARAM,
 } from "@/components/search/results-category-control";
 import { cn } from "@/lib/utils";
-import { splitByGroup } from "@/lib/categories";
 import { CategoryIcon } from "@/components/categories/category-icon";
 
 const PRESS_CLASSES =
@@ -87,9 +85,7 @@ export function SearchComposer({
       // Категория — настоящий фильтр, а не текст в строке поиска: иначе
       // «Японская» искалась бы как слово в названиях, и роллы не находились.
       // Набранный запрос сохраняем — фильтр и текст должны работать вместе.
-      const params = new URLSearchParams({
-        [chip.isGroup ? DISH_GROUP_PARAM : TAB_PARAM[tab]]: chip.value,
-      });
+      const params = new URLSearchParams({ [TAB_PARAM[tab]]: chip.value });
       const q = query.trim();
       if (q) params.set("q", q);
       router.push(`/search/results?${params.toString()}`);
@@ -173,60 +169,7 @@ export function SearchComposer({
       </div>
 
       <div className="hide-scroll flex-1 overflow-y-auto px-3.5 pb-28 max-[409px]:px-3">
-        {tab === "dishes" && categoryGroups.dishGroups?.length ? (
-          splitByGroup(tiles).map((section) => {
-            const groupChip = categoryGroups.dishGroups?.find((g) => g.value === section.key);
-            return (
-              <section key={section.key || "rest"} className="mb-6 last:mb-0">
-                {/* Заголовок — и разделитель, и кнопка: «хочу супы» ищет по всей
-                    группе, не перечисляя борщ с солянкой. */}
-                <div className="mb-2.5 flex items-center gap-2.5">
-                  <h3 className="shrink-0 text-[15px] leading-none font-extrabold tracking-[-0.3px] text-[#15291C]">
-                    {section.title}
-                  </h3>
-                  <span className="shrink-0 text-[11.5px] leading-none font-bold text-[#8A958E] tabular-nums">
-                    {section.items.length}
-                  </span>
-                  <span className="h-px flex-1 bg-[rgba(20,40,28,0.12)]" />
-                  {groupChip && (
-                    <button
-                      type="button"
-                      onClick={() => goToCategory(groupChip)}
-                      aria-label={`Показать все: ${section.title}`}
-                      className={cn(
-                        "grid size-[26px] shrink-0 place-items-center rounded-full bg-[#2ECC71]/12 text-[#1B7F45]",
-                        PRESS_CLASSES
-                      )}
-                    >
-                      <ChevronRight size={16} strokeWidth={2.6} />
-                    </button>
-                  )}
-                </div>
-                <div className="grid grid-cols-4 gap-x-2.5 gap-y-3.5">
-          {section.items.map((chip) => (
-            <button
-              key={chip.id}
-              type="button"
-              onClick={() => goToCategory(chip)}
-              className={cn(
-                "flex min-w-0 flex-col items-center gap-1.5 outline-none",
-                PRESS_CLASSES
-              )}
-            >
-              <span className="grid aspect-square w-full place-items-center overflow-hidden rounded-[18px] bg-white text-[24px] shadow-[0_6px_16px_rgba(20,40,28,0.07),inset_0_0_0_1.5px_#2ECC71] max-[380px]:text-[22px]">
-                <CategoryIcon icon={chip.icon} emoji={chip.emoji} size={30} fill />
-              </span>
-              <span className="line-clamp-2 w-full text-center text-[10.5px] leading-[1.15] font-bold text-[#15291C] [overflow-wrap:anywhere] max-[380px]:text-[10px]">
-                {chip.label}
-              </span>
-            </button>
-          ))}
-                </div>
-              </section>
-            );
-          })
-        ) : (
-          <div className="grid grid-cols-4 gap-x-2.5 gap-y-3.5">
+        <div className="grid grid-cols-4 gap-x-2.5 gap-y-3.5">
           {tiles.map((chip) => (
             <button
               key={chip.id}
@@ -245,8 +188,7 @@ export function SearchComposer({
               </span>
             </button>
           ))}
-          </div>
-        )}
+        </div>
       </div>
     </div>
   );

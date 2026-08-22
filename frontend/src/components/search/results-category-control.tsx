@@ -5,7 +5,6 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { UtensilsCrossed, X } from "lucide-react";
 
 import { CategoryModeToggle } from "@/components/categories/category-mode-toggle";
-import { splitByGroup } from "@/lib/categories";
 import { cn } from "@/lib/utils";
 import { CategoryIcon } from "@/components/categories/category-icon";
 
@@ -20,18 +19,11 @@ export type CategoryChip = {
   emoji: string;
   /** Картинка из справочника; пусто — рисуется эмодзи. */
   icon?: string;
-  /** Код группы блюда — по нему список бьётся на разделы. */
-  group?: string;
-  groupName?: string;
-  /** Это сама группа: выбор берёт все блюда внутри неё. */
-  isGroup?: boolean;
 };
 export type CategoryGroups = {
   dishes: CategoryChip[];
   cuisines: CategoryChip[];
   types: CategoryChip[];
-  /** Группы блюд — заголовки разделов и выбор «все супы» одним нажатием. */
-  dishGroups?: CategoryChip[];
 };
 
 export type Tab = "dishes" | "cuisines" | "types";
@@ -49,10 +41,7 @@ export const TAB_PARAM: Record<Tab, string> = {
   cuisines: "cuisine",
   types: "type",
 };
-// Группа живёт отдельным параметром: она на той же вкладке, что и блюда, но
-// фильтрует иначе — не одно название, а всё, что в группу входит.
-export const DISH_GROUP_PARAM = "dish_group";
-export const CATEGORY_PARAMS = [...Object.values(TAB_PARAM), DISH_GROUP_PARAM];
+export const CATEGORY_PARAMS = Object.values(TAB_PARAM);
 
 // Вкладка, где выбирают сколько угодно значений сразу: видов у позиции бывает
 // несколько (веганский фастфуд), а блюдо и кухня у неё одни.
@@ -81,20 +70,6 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
 
   // Что выбрано → подпись кнопки, стартовая вкладка и подсветка чипов.
   const matched = useMemo(() => {
-    // Группа проверяется первой: она лежит на вкладке блюд, но своим параметром.
-    const groupSlugs = (new URLSearchParams(search).get(DISH_GROUP_PARAM) ?? "")
-      .split(",").map((v) => v.trim()).filter(Boolean);
-    if (groupSlugs.length) {
-      const chips = (groups.dishGroups ?? []).filter((c) => groupSlugs.includes(c.value));
-      if (chips.length) {
-        return {
-          tab: "dishes" as Tab,
-          label: chips[0].label,
-          values: chips.map((c) => c.value),
-        };
-      }
-    }
-
     for (const tab of TABS) {
       const values = selectedValues(search, tab.id);
       if (!values.length) continue;
@@ -126,9 +101,7 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
           ? current.filter((v) => v !== chip.value) // повторный выбор снимает
           : [...current, chip.value]
         : [];
-      if (next.length) {
-        params.set(chip?.isGroup ? DISH_GROUP_PARAM : TAB_PARAM[tabId], next.join(","));
-      }
+      if (next.length) params.set(TAB_PARAM[tabId], next.join(","));
 
       const qs = params.toString();
       router.push(qs ? `${pathname}?${qs}` : pathname);
@@ -218,103 +191,40 @@ export function ResultsCategoryControl({ groups }: { groups: CategoryGroups }) {
               onValueChange={setTab}
             />
 
-            <div className="hide-scroll mt-4 max-h-[46vh] overflow-y-auto pb-1">
-              {tab === "dishes" && groups.dishGroups?.length ? (
-                splitByGroup(activeList).map((section) => {
-                  const groupChip = groups.dishGroups?.find((g) => g.value === section.key);
-                  const groupActive = Boolean(groupChip && matched?.values.includes(groupChip.value));
-                  return (
-                    <section key={section.key || "rest"} className="mb-4 last:mb-0">
-                      {/* Заголовок сам по себе выбор: «хочу супы» — целиком группой. */}
-                      <button
-                        type="button"
-                        onClick={() => groupChip && pickCategory(groupChip)}
-                        disabled={!groupChip}
-                        aria-pressed={groupActive}
-                        className={cn(
-                          "mb-2 flex w-full items-center justify-between gap-2 rounded-[14px] px-3 py-2 text-left transition-colors",
-                          groupActive ? "bg-[#2ECC71] text-white" : "bg-white/70 text-[#15291C]",
-                          PRESS_CLASSES,
-                        )}
-                      >
-                        <span className="text-[13.5px] font-extrabold tracking-[-0.2px]">
-                          {section.title}
-                        </span>
-                        {groupChip && (
-                          <span
-                            className={cn(
-                              "text-[11.5px] font-bold",
-                              groupActive ? "text-white/85" : "text-[#5C6B62]",
-                            )}
-                          >
-                            {groupActive ? "вся группа" : "выбрать все"}
-                          </span>
-                        )}
-                      </button>
-                      <div className="grid grid-cols-4 gap-x-2.5 gap-y-3.5">
-                        {section.items.map((chip) => (
-                          <CategoryButton
-                            key={chip.id}
-                            chip={chip}
-                            isActive={Boolean(matched?.values.includes(chip.value))}
-                            onPick={pickCategory}
-                          />
-                        ))}
-                      </div>
-                    </section>
-                  );
-                })
-              ) : (
-                <div className="grid grid-cols-4 gap-x-2.5 gap-y-3.5">
-                  {activeList.map((chip) => (
-                    <CategoryButton
-                      key={chip.id}
-                      chip={chip}
-                      isActive={Boolean(matched?.values.includes(chip.value))}
-                      onPick={pickCategory}
-                    />
-                  ))}
-                </div>
-              )}
+            <div className="hide-scroll mt-4 grid max-h-[46vh] grid-cols-4 gap-x-2.5 gap-y-3.5 overflow-y-auto pb-1">
+              {activeList.map((chip) => {
+                const isActive = Boolean(matched?.values.includes(chip.value));
+                return (
+                  <button
+                    key={chip.id}
+                    type="button"
+                    onClick={() => pickCategory(chip)}
+                    aria-pressed={isActive}
+                    className={cn(
+                      "flex min-w-0 flex-col items-center gap-1.5 outline-none",
+                      PRESS_CLASSES
+                    )}
+                  >
+                    <span
+                      className={cn(
+                        "grid aspect-square w-full place-items-center overflow-hidden rounded-[18px] text-[24px] transition-colors max-[380px]:text-[22px]",
+                        isActive
+                          ? "bg-[#2ECC71] ring-2 ring-[#2ECC71] ring-offset-2"
+                          : "bg-white shadow-[0_6px_16px_rgba(20,40,28,0.07),inset_0_0_0_1.5px_#2ECC71]"
+                      )}
+                    >
+                      <CategoryIcon icon={chip.icon} emoji={chip.emoji} size={30} fill />
+                    </span>
+                    <span className="line-clamp-2 w-full text-center text-[10.5px] leading-[1.15] font-bold text-[#15291C] [overflow-wrap:anywhere] max-[380px]:text-[10px]">
+                      {chip.label}
+                    </span>
+                  </button>
+                );
+              })}
             </div>
           </div>
         </div>
       )}
     </>
-  );
-}
-
-
-/** Один чип категории. Вынесен: рисуется и в разделах, и в плоском списке. */
-function CategoryButton({
-  chip,
-  isActive,
-  onPick,
-}: {
-  chip: CategoryChip;
-  isActive: boolean;
-  onPick: (chip: CategoryChip) => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={() => onPick(chip)}
-      aria-pressed={isActive}
-      className={cn("flex min-w-0 flex-col items-center gap-1.5 outline-none", PRESS_CLASSES)}
-    >
-      <span
-        className={cn(
-          "grid aspect-square w-full place-items-center overflow-hidden rounded-[18px] text-[24px] transition-colors max-[380px]:text-[22px]",
-          isActive
-            ? "bg-[#2ECC71] ring-2 ring-[#2ECC71] ring-offset-2"
-            : "bg-white shadow-[0_6px_16px_rgba(20,40,28,0.07),inset_0_0_0_1.5px_#2ECC71]",
-        )}
-      >
-        <CategoryIcon icon={chip.icon} emoji={chip.emoji} size={30} fill />
-      </span>
-      <span className="line-clamp-2 w-full text-center text-[10.5px] leading-[1.15] font-bold text-[#15291C] [overflow-wrap:anywhere] max-[380px]:text-[10px]">
-        {chip.label}
-      </span>
-    </button>
   );
 }

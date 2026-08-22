@@ -21,7 +21,6 @@ from django.utils import timezone
 from rest_framework import serializers
 
 from .models import (
-    DishGroup,
     MAX_IMAGES_PER_POST, MAX_TAGS_PER_POST, MAX_POSTS_PER_DAY, MIN_PRICE_CHANGE_RATIO,
     Comment, DishType, MenuItem, Post, PostImage, PostStatistics,
     PostTag, Restaurant, Tag, Taxon, normalize_name,
@@ -71,29 +70,15 @@ class TaxonSerializer(IconMixin, serializers.ModelSerializer):
         fields = ['id', 'kind', 'name', 'slug', 'emoji', 'icon']
 
 
-class DishGroupSerializer(IconMixin, serializers.ModelSerializer):
-    """Группа блюд — заголовок в списке выбора и фильтр «все супы» разом."""
-
-    icon = serializers.SerializerMethodField()
-
-    class Meta:
-        model = DishGroup
-        fields = ['id', 'name', 'slug', 'emoji', 'icon']
-
-
 class DishTypeSerializer(IconMixin, serializers.ModelSerializer):
     """Тип блюда вместе с категориями по умолчанию — фронт подставляет их в форму."""
 
     default_taxons = TaxonSerializer(many=True, read_only=True)
     icon = serializers.SerializerMethodField()
-    # Плоским полем, а не вложенным объектом: список приходит уже
-    # отсортированным по группам, фронту нужен только код для заголовка.
-    group = serializers.SlugRelatedField(slug_field='slug', read_only=True)
-    group_name = serializers.CharField(source='group.name', read_only=True, default=None)
 
     class Meta:
         model = DishType
-        fields = ['id', 'name', 'emoji', 'icon', 'group', 'group_name', 'default_taxons']
+        fields = ['id', 'name', 'emoji', 'icon', 'default_taxons']
 
 
 class RestaurantSerializer(serializers.ModelSerializer):

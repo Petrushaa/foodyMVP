@@ -15,14 +15,13 @@ from pathlib import Path
 
 from django.core.management.base import BaseCommand, CommandError
 
-from posts.models import DishGroup, DishType, Taxon
+from posts.models import DishType, Taxon
 
 DISH_SECTION = 'dish-types'
-# Группы блюд идут отдельной секцией: их порядок задаёт порядок разделов на
-# экране выбора, а порядок блюд внутри секции dish-types — порядок внутри
-# раздела. Без этого порядок групп жил бы только в базе и терялся при переносе.
-GROUP_SECTION = 'dish-groups'
-TAXON_SECTIONS = ('cuisine', 'format', 'form', 'diet')
+# Осей две: кухня и вид. Прежние format/form/diet слили в «вид» ещё
+# раньше, но здесь они остались — и порядок видов файлом не задавался
+# вовсе, потому что таких значений в базе давно нет.
+TAXON_SECTIONS = ('cuisine', 'type')
 
 
 def parse(path):
@@ -73,12 +72,6 @@ class Command(BaseCommand):
         if options['reset']:
             self._reset(sections)
 
-        for position, slug in enumerate(sections.get(GROUP_SECTION, []), start=1):
-            self._set(
-                DishGroup.objects.filter(slug__iexact=slug), position,
-                f'группа «{slug}»',
-            )
-
         for position, name in enumerate(sections.get(DISH_SECTION, []), start=1):
             self._set(DishType.objects.filter(name__iexact=name), position, f'блюдо «{name}»')
 
@@ -108,13 +101,6 @@ class Command(BaseCommand):
             for pk in DishType.objects.filter(name__iexact=name).values_list('pk', flat=True)
         ]
         DishType.objects.exclude(pk__in=listed).update(sort_order=None)
-
-        listed_groups = [
-            pk
-            for slug in sections.get(GROUP_SECTION, [])
-            for pk in DishGroup.objects.filter(slug__iexact=slug).values_list('pk', flat=True)
-        ]
-        DishGroup.objects.exclude(pk__in=listed_groups).update(sort_order=None)
 
         for kind in TAXON_SECTIONS:
             listed = [
