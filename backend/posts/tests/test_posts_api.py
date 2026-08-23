@@ -36,9 +36,17 @@ class TestCreate:
         assert response.data['menu_item'] is None
         assert Restaurant.objects.count() == 0, 'каталог создаётся только при одобрении'
 
-    def test_requires_dish_type_for_new_item(self, auth_client):
+    def test_dish_type_is_not_required(self, auth_client):
+        """
+        Автор блюдо не выбирает: на неполном каталоге он упирался бы в
+        «моего блюда нет». Система выводит его из названия позиции.
+        """
         response = auth_client.post(POSTS_URL, payload())
-        assert response.status_code == 400
+
+        assert response.status_code == 201, response.data
+        # «Чизбургер» — разновидность бургера, отдельным блюдом не заведён.
+        created = Post.objects.get(id=response.data['id'])
+        assert created.draft_dish_type.name == 'Бургер'
 
     def test_requires_price_for_new_item(self, auth_client, burger):
         response = auth_client.post(POSTS_URL, payload(dish_type_id=burger.id, price=''))

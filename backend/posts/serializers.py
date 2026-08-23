@@ -26,6 +26,7 @@ from .models import (
     PostTag, Restaurant, Tag, Taxon, normalize_name,
 )
 from .services.restaurants import find_exact, find_possible_duplicates
+from .services.search import guess_dish_type
 from .services.text import check_address, check_name, is_definitely_garbage
 from users.serializers import FeedPostAuthorSerializer
 
@@ -218,6 +219,16 @@ class PostListSerializer(serializers.ModelSerializer):
 # Создание поста
 # ---------------------------------------------------------------------------
 
+# Виды, которые указывает автор поста. Это факты о съеденном, а не
+# классификация: «я ел вегетарианскую» — тут ошибиться трудно. Всё остальное
+# («фастфуд это или стритфуд») приходит от блюда, потому что там человек
+# гадает, и каждый гадает по-своему.
+AUTHOR_TAXON_SLUGS = (
+    'vegetarian', 'vegan', 'healthy', 'lenten', 'spicy',
+    'gluten-free', 'lactose-free', 'halal', 'kids',
+)
+
+
 class PostCreateSerializer(serializers.ModelSerializer):
     """
     Создание поста. Позиция и заведение в каталоге пока не появляются —
@@ -339,7 +350,14 @@ class PostCreateSerializer(serializers.ModelSerializer):
         «Бургеры» должно находить «Бургер».
         """
         name = (attrs.pop('dish_type_name', '') or '').strip()
-        if attrs.get('draft_dish_type') or not name:
+        if attrs.get('draft_dish_type'):
+            return
+        if not name:
+            # Блюдо не прислали вовсе — выводим его из названия позиции.
+            # Не угадалось — оставляем пустым: у нишевой еды витрины нет.
+            item_name = (attrs.get('menu_item_name') or '').strip()
+            if item_name:
+                attrs['draft_dish_type'] = guess_dish_type(item_name)
             return
 
         normalized = normalize_name(name)
@@ -404,6 +422,21 @@ class PostCreateSerializer(serializers.ModelSerializer):
                 f'Достигнут суточный лимит: {MAX_POSTS_PER_DAY} постов. Попробуйте завтра.'
             )
 
+    def validate_taxon_ids(self, value):
+        """
+        Отсекаем то, что автор указывать не должен.
+
+        Классификация («фастфуд», «супы») приходит от блюда и одинакова для
+        всех его позиций. Если позволить указывать её руками, одну и ту же
+        шаурму разные люди разложат по-разному, и фильтр станет врать.
+        """
+        wrong = [t.name for t in value if t.slug not in AUTHOR_TAXON_SLUGS]
+        if wrong:
+            raise serializers.ValidationError(
+                f'Эти категории проставляются автоматически: {", ".join(wrong)}.'
+            )
+        return value
+
     def _validate_existing_position(self, attrs, menu_item):
         """
         Позиция уже есть: категории и тип блюда берутся с неё и не редактируются.
@@ -429,10 +462,6 @@ class PostCreateSerializer(serializers.ModelSerializer):
         if not name:
             raise serializers.ValidationError(
                 'Выберите позицию из списка или введите название новой.'
-            )
-        if not attrs.get('draft_dish_type'):
-            raise serializers.ValidationError(
-                'Выберите тип блюда — по нему подставляются категории.'
             )
         if attrs.get('price') is None:
             raise serializers.ValidationError(
@@ -720,6 +749,10 @@ class ModerationDecisionSerializer(serializers.Serializer):
     menu_item_name = serializers.CharField(
         max_length=255, required=False, allow_blank=True,
         help_text='Поправленное название позиции.',
+    )
+    dish_type_id = serializers.PrimaryKeyRelatedField(
+        queryset=DishType.objects.all(), required=False, allow_null=True,
+        help_text='Поправить блюдо, если система угадала неверно.',
     )
     accept_price = serializers.BooleanField(
         default=True, help_text='Принять предложенную автором цену.',

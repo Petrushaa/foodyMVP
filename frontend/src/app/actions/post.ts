@@ -72,12 +72,9 @@ export async function createPost(formData: FormData) {
     }
     newFormData.append("restaurant_city", city);
 
-    // Категория из интерфейса — это тип блюда. Название сопоставит сервер:
-    // «Бургеры» в списке фронта и «Бургер» в справочнике — одно и то же.
-    const category = formData.get("category") as string;
-    if (category) {
-        newFormData.append("dish_type_name", category);
-    }
+    // Блюдо не передаём: человек его больше не выбирает. Сервер выводит его
+    // из названия позиции, а модератор подтверждает или меняет. На неполном
+    // каталоге выбор из списка означал бы постоянное «моего блюда нет».
 
     // Обработка тегов
     const tags = formData.getAll("tags") as string[];

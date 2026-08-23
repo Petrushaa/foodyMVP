@@ -774,7 +774,6 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
     // Место выбрано из подсказок — отправляем его id. Тогда пост привяжется
     // к существующему заведению, и опечатка в названии дубля не создаст.
     if (placeId !== null) fd.append("restaurantId", String(placeId));
-    if (category) fd.append("category", category.label);
     tags.forEach((t) => fd.append("tags", t));
     photos.forEach((file) => fd.append("image", file));
 
@@ -894,18 +893,6 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
               maxLength={50}
               onChange={setDish}
             />
-
-            <div>
-              <CategoryButton
-                category={category}
-                onClick={() => setShowCategoryPicker(true)}
-              />
-              {category && !categoryTouched && (
-                <p className="mt-1.5 px-1 font-[family-name:var(--font-roboto)] text-[12.5px] font-medium text-[#17913F]">
-                  Определили автоматически по названию — можно сменить.
-                </p>
-              )}
-            </div>
 
             <section>
               <h2 className="mb-2 text-[22px] leading-tight font-semibold tracking-[0px] text-[#15291C] max-[380px]:text-[20px]">

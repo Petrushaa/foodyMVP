@@ -84,6 +84,7 @@ class ModerationViewSet(viewsets.ReadOnlyModelViewSet):
                 menu_item=data.get('menu_item_id'),
                 restaurant=data.get('restaurant_id'),
                 menu_item_name=data.get('menu_item_name') or None,
+                dish_type=data.get('dish_type_id'),
                 accept_price=data.get('accept_price', True),
             )
         except ModerationError as exc:

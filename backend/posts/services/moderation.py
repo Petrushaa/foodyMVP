@@ -85,14 +85,45 @@ def _menu_item_from_draft(post, restaurant, name=None):
         menu_item = MenuItem.objects.get(restaurant=restaurant, normalized_name=normalized)
         return menu_item, False
 
-    # Позиция без категорий не находится ни одним фильтром — ни по кухне, ни по
-    # формату, ни по форме. Поэтому если в заявке их нет, берём у типа блюда.
-    taxons = post.draft_taxons.all()
-    if not taxons.exists() and post.draft_dish_type_id:
-        taxons = post.draft_dish_type.default_taxons.all()
-    menu_item.taxons.set(taxons)
+    menu_item.taxons.set(collect_taxons(post))
     logger.info('Модерация: создана позиция «%s» в %s', menu_item.name, restaurant.name)
     return menu_item, True
+
+
+# Диеты, при которых мясная метка снимается: веганская шаурма остаётся шаурмой,
+# но мясом уже не является.
+MEATLESS_SLUGS = ('vegan', 'vegetarian', 'lenten')
+MEAT_SLUGS = ('meat', 'chicken', 'fish', 'seafood')
+
+
+def collect_taxons(post):
+    """
+    Собирает категории позиции из двух источников.
+
+    От блюда приходит классификация — «стритфуд», «супы», «мясо». Она
+    одинакова для всех позиций блюда, и автор её не указывает: он бы гадал.
+
+    От автора приходят свойства его тарелки — «вегетарианское», «острое». Их
+    не вывести из блюда: шаурма бывает и мясная, и овощная.
+
+    Складываем, а не заменяем: раньше указанная автором диета вытесняла всю
+    классификацию, и позиция выпадала из фильтров по виду еды.
+    """
+    from ..models import Taxon
+
+    from_dish = (
+        set(post.draft_dish_type.default_taxons.all())
+        if post.draft_dish_type_id else set()
+    )
+    from_author = set(post.draft_taxons.all())
+    taxons = from_dish | from_author
+
+    # Автор отметил, что мяса не было — снимаем мясную метку, унаследованную
+    # от блюда. Иначе веганский бургер попал бы в подборку «Мясо».
+    if any(t.slug in MEATLESS_SLUGS for t in from_author):
+        taxons = {t for t in taxons if t.slug not in MEAT_SLUGS}
+
+    return taxons
 
 
 def _apply_price_proposal(post, menu_item, accept):
@@ -114,7 +145,7 @@ def _apply_price_proposal(post, menu_item, accept):
 
 @transaction.atomic
 def approve_post(post, moderator, *, menu_item=None, restaurant=None,
-                 menu_item_name=None, accept_price=True):
+                 menu_item_name=None, dish_type=None, accept_price=True):
     """
     Одобряет пост и заводит всё, чего не хватает в каталоге.
 
@@ -124,12 +155,18 @@ def approve_post(post, moderator, *, menu_item=None, restaurant=None,
     по одному адресу расходились в два места с одинаковыми роллами.
 
     `menu_item_name` — поправленное название, если автор написал криво.
+    `dish_type` — поправленное блюдо. Автор его не выбирает: систему просят
+    угадать по названию позиции, а модератор соглашается или меняет. Смена
+    блюда меняет и категории — они наследуются от него.
     `accept_price` — решение по предложенной цене.
     """
     if post.status == Post.STATUS_APPROVED:
         raise ModerationError('Пост уже одобрен.')
     if post.is_deleted:
         raise ModerationError('Пост удалён автором.')
+
+    if dish_type is not None:
+        post.draft_dish_type = dish_type
 
     target = menu_item or post.menu_item
     if target is None:

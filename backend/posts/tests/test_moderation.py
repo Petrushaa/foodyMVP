@@ -156,17 +156,24 @@ class TestTaxonsFromDishType:
         assert set(post.draft_taxons.all()) == set(burger.default_taxons.all())
         assert post.draft_taxons.exists(), 'иначе позиция выпадет из всех фильтров'
 
-    def test_explicit_choice_wins_over_defaults(self, auth_client, burger):
-        chosen = burger.default_taxons.first()
+    def test_author_choice_adds_to_defaults(self, auth_client, burger):
+        """
+        Указанное автором добавляется к категориям блюда, а не заменяет их.
+
+        Раньше диета вытесняла классификацию: отметил «веганское» — позиция
+        теряла «фастфуд» и выпадала из фильтров по виду еды.
+        """
+        from posts.models import Taxon
+        vegan = Taxon.objects.get(kind='type', slug='vegan')
 
         auth_client.post('/api/v1/posts/', {
             'restaurant_name': 'Бургерная', 'restaurant_address': 'Тверская 15',
             'restaurant_city': 'Москва', 'menu_item_name': 'Чизбургер',
             'author_rating': 8, 'price': 350, 'dish_type_id': burger.id,
-            'taxon_ids': [chosen.id],
+            'taxon_ids': [vegan.id],
         })
 
-        assert list(Post.objects.get().draft_taxons.all()) == [chosen]
+        assert list(Post.objects.get().draft_taxons.all()) == [vegan]
 
     def test_menu_item_inherits_taxons_on_approval(self, author, moderator, make_post,
                                                    burger):

@@ -25,6 +25,14 @@ logger = logging.getLogger(__name__)
 
 # Порог схожести для триграмм. Ниже — начинается мусор, выше — не ловятся опечатки.
 TRIGRAM_THRESHOLD = 0.3
+# Порог подобран по замеру на нынешнем справочнике: настоящие опечатки
+# («Шаурам», «Бургр») дают 0.33–0.44, а самое похожее ложное срабатывание
+# («Салат с рукколой» на «Салат Цезарь») — 0.26. Между ними и режем.
+#
+# Промахнуться здесь не страшно: угаданное блюдо всё равно подтверждает
+# модератор. Пропустить хуже, чем предложить неверное — во втором случае он
+# просто меняет, в первом выбирает с нуля.
+DISH_GUESS_THRESHOLD = 0.3
 
 # Раскладка: латинская клавиша → русская буква на том же месте клавиатуры.
 _LATIN_KEYS = "qwertyuiop[]" + "asdfghjkl;'" + "zxcvbnm,." + "`"
@@ -173,3 +181,58 @@ def find_similar(name, restaurant, *, limit=5, threshold=TRIGRAM_THRESHOLD):
         .filter(similarity__gt=threshold)
         .order_by('-similarity')[:limit]
     )
+
+
+def guess_dish_type(name):
+    """
+    Угадывает блюдо справочника по названию позиции.
+
+    Человек больше не выбирает блюдо сам: на неполном каталоге он постоянно
+    упирался бы в «моего блюда нет», а это выглядит как поломка. Вместо выбора
+    система предполагает, а модератор подтверждает.
+
+    Лесенка та же, что и в поиске позиций, и по той же причине: сначала самые
+    надёжные способы, нечёткое сравнение — последним, чтобы «Пельменная» не
+    превратилась в «Пельмени» раньше, чем отработает точное совпадение.
+
+    Возвращает None, когда ничего похожего нет. Это нормальный исход: блюдо у
+    позиции необязательное, нишевая еда живёт без него и находится поиском.
+    """
+    from ..models import DishType
+
+    text = (name or '').strip()
+    if not text:
+        return None
+
+    variants = query_variants(text)
+    if not variants:
+        return None
+
+    dishes = list(DishType.objects.all())
+    if not dishes:
+        return None
+
+    normalized = {normalize_name(d.name): d for d in dishes}
+
+    # 1. Название позиции целиком совпало с блюдом: «Шаурма» → Шаурма.
+    for variant in variants:
+        if variant in normalized:
+            return normalized[variant]
+
+    # 2. Блюдо стоит словом в названии: «Шаурма классическая» → Шаурма.
+    #    Идём от длинных названий к коротким, иначе «Салат Цезарь» проиграет
+    #    «Салату», случись он в справочнике.
+    for dish_key, dish in sorted(normalized.items(), key=lambda p: -len(p[0])):
+        for variant in variants:
+            if dish_key in variant.split() or f' {dish_key} ' in f' {variant} ':
+                return dish
+
+    # 3. Нечёткое сравнение — ловит опечатки и формы слова.
+    match = (
+        DishType.objects
+        .annotate(similarity=TrigramSimilarity('name', text))
+        .filter(similarity__gt=DISH_GUESS_THRESHOLD)
+        .order_by('-similarity')
+        .first()
+    )
+    return match
