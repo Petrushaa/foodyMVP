@@ -3,30 +3,16 @@
 import { useEffect, useState } from "react";
 
 import { CategoryIcon } from "@/components/categories/category-icon";
+import { AUTHOR_TAXON_SLUGS } from "@/lib/taxons";
 import { cn } from "@/lib/utils";
 
 /**
  * Свойства блюда, которые указывает автор поста.
  *
- * Только то, где он единственный источник правды: он это ел и знает, была ли
- * шаурма вегетарианской и насколько острой. Всё, что можно вывести из блюда
- * («фастфуд это или стритфуд»), сюда не попадает — там человек гадает, и
- * каждый гадает по-своему, отчего фильтры начинают врать.
- *
- * Тот же список проверяет и бэкенд: пришлёт клиент лишнее — вернётся ошибка.
+ * Какие именно и почему граница проходит там — в `@/lib/taxons`. Тот же список
+ * знает панель модератора: она показывает отметки автора отдельно от того, что
+ * проставила система.
  */
-const AUTHOR_SLUGS = [
-  "vegetarian",
-  "vegan",
-  "healthy",
-  "lenten",
-  "spicy",
-  "gluten-free",
-  "lactose-free",
-  "halal",
-  "kids",
-];
-
 type Option = { id: number; slug: string; name: string; emoji?: string; icon?: string | null };
 
 export function DietChips({
@@ -50,7 +36,7 @@ export function DietChips({
         // Порядок берём свой, а не серверный: он про каталог, а здесь важно,
         // чтобы часто отмечаемое стояло первым.
         const bySlug = new Map(list.map((t) => [t.slug, t]));
-        setOptions(AUTHOR_SLUGS.map((s) => bySlug.get(s)).filter(Boolean) as Option[]);
+        setOptions(AUTHOR_TAXON_SLUGS.map((s) => bySlug.get(s)).filter(Boolean) as Option[]);
       } catch {
         // Не загрузилось — блок просто не покажется, пост создать это не мешает.
       }

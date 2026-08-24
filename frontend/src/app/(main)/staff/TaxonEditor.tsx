@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 
 import { CategoryIcon } from "@/components/categories/category-icon";
+import { isAuthorTaxon } from "@/lib/taxons";
 import { cn } from "@/lib/utils";
 
 type Taxon = { id: number; kind: string; slug: string; name: string; emoji?: string; icon?: string | null };
@@ -46,7 +47,18 @@ export function TaxonEditor({
   }, []);
 
   const cuisines = useMemo(() => all.filter((t) => t.kind === "cuisine"), [all]);
-  const types = useMemo(() => all.filter((t) => t.kind === "type"), [all]);
+  // Виды разведены по происхождению. Свойства тарелки автор знает лично —
+  // был ли он веганским, насколько острым; модератор их видит, но менять
+  // должен только с оглядкой: он этого блюда не ел. Классификацию наоборот
+  // проставляет он, автора о ней не спрашивают вовсе.
+  const authorTypes = useMemo(
+    () => all.filter((t) => t.kind === "type" && isAuthorTaxon(t.slug)),
+    [all],
+  );
+  const staffTypes = useMemo(
+    () => all.filter((t) => t.kind === "type" && !isAuthorTaxon(t.slug)),
+    [all],
+  );
 
   /** Кухня одна — выбор новой снимает прежнюю, повторное нажатие снимает вовсе. */
   function pickCuisine(id: number) {
@@ -76,9 +88,20 @@ export function TaxonEditor({
           <Chip key={t.id} taxon={t} on={selected.includes(t.id)} onClick={() => pickCuisine(t.id)} />
         ))}
       </Group>
-      <Group label="Вид" hint="сколько нужно">
-        {types.map((t) => (
+      <Group label="Вид" hint="проставляете вы, сколько нужно">
+        {staffTypes.map((t) => (
           <Chip key={t.id} taxon={t} on={selected.includes(t.id)} onClick={() => toggleType(t.id)} />
+        ))}
+      </Group>
+      <Group label="Со слов автора" hint="он это ел — меняйте, только если видно по фото">
+        {authorTypes.map((t) => (
+          <Chip
+            key={t.id}
+            taxon={t}
+            on={selected.includes(t.id)}
+            author
+            onClick={() => toggleType(t.id)}
+          />
         ))}
       </Group>
     </div>
@@ -96,7 +119,18 @@ function Group({ label, hint, children }: { label: string; hint: string; childre
   );
 }
 
-function Chip({ taxon, on, onClick }: { taxon: Taxon; on: boolean; onClick: () => void }) {
+function Chip({
+  taxon,
+  on,
+  author = false,
+  onClick,
+}: {
+  taxon: Taxon;
+  on: boolean;
+  /** Отметка автора: другой цвет, чтобы её не спутать со своей. */
+  author?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
@@ -104,9 +138,10 @@ function Chip({ taxon, on, onClick }: { taxon: Taxon; on: boolean; onClick: () =
       aria-pressed={on}
       className={cn(
         "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11.5px] font-semibold transition-colors",
-        on
-          ? "bg-[#2ECC71] text-white ring-1 ring-[#2ECC71]"
-          : "bg-[#F1F5F2] text-[#15291C] ring-1 ring-transparent hover:ring-[rgba(20,40,28,0.14)]",
+        on && author && "bg-[#F0A020] text-white ring-1 ring-[#F0A020]",
+        on && !author && "bg-[#2ECC71] text-white ring-1 ring-[#2ECC71]",
+        !on
+          && "bg-[#F1F5F2] text-[#15291C] ring-1 ring-transparent hover:ring-[rgba(20,40,28,0.14)]",
       )}
     >
       <CategoryIcon icon={taxon.icon} emoji={taxon.emoji} size={15} />

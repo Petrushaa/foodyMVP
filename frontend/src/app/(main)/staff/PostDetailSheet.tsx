@@ -4,17 +4,18 @@ import { useEffect, useState } from "react";
 import Image from "next/image";
 import {
     AlertTriangle,
+    ArrowLeft,
     Check,
     ChevronLeft,
     ChevronRight,
     Loader2,
     MapPin,
-    Star,
     X,
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { CategoryIcon } from "@/components/categories/category-icon";
+import { RatingStars } from "@/components/feed/rating-stars";
+import { UserAvatar } from "@/components/feed/user-avatar";
 import { TaxonEditor } from "./TaxonEditor";
 import type { DishOption, PendingPost } from "./StaffPanel";
 
@@ -103,33 +104,48 @@ export function PostDetailSheet({
         : "";
 
     return (
-        <div className="fixed inset-0 z-40 flex justify-center sm:items-center sm:p-6">
+        <>
+            {/* Затемнение — только на ПК: на телефоне разбор занимает весь экран,
+                ровно как развёрнутый пост в ленте. */}
             <button
                 type="button"
                 aria-label="Закрыть разбор"
                 onClick={onClose}
-                className="absolute inset-0 cursor-default bg-[rgba(20,40,28,0.34)]"
+                className="fixed inset-0 z-40 hidden cursor-default bg-[rgba(20,40,28,0.45)] backdrop-blur-[2px] lg:block"
             />
-            <div className="relative flex h-full w-full max-w-[40rem] flex-col overflow-hidden bg-[#F4F6F3] sm:h-auto sm:max-h-full sm:rounded-[26px] sm:shadow-[0_24px_60px_rgba(20,40,28,0.32)]">
+            <div
+                role="dialog"
+                aria-modal="true"
+                aria-label={post.title}
+                className="fixed inset-0 z-50 flex h-[100dvh] flex-col overflow-hidden border-0 bg-white/82 text-[#15291C] shadow-[0_18px_42px_rgba(20,40,28,0.22),inset_0_1px_0_rgba(255,255,255,0.88)] backdrop-blur-[30px] backdrop-saturate-[190%] lg:m-auto lg:h-[min(86vh,860px)] lg:w-[560px] lg:rounded-[28px] lg:border lg:border-black/5"
+            >
                 {/* ─── Шапка ─── */}
-                <div className="flex shrink-0 items-center gap-3 border-b border-black/5 bg-white/80 px-4 py-3 backdrop-blur">
+                <div className="flex shrink-0 items-center gap-2.5 px-3 pt-3 pr-3 pb-2.5 pl-3.5">
                     <button
                         type="button"
                         onClick={onClose}
-                        aria-label="Закрыть"
-                        className="grid size-9 place-items-center rounded-full bg-black/5 transition hover:bg-black/10"
+                        aria-label="Закрыть разбор"
+                        className="grid size-8 shrink-0 cursor-pointer place-items-center rounded-[9px] bg-[rgba(20,40,28,0.06)] text-[#15291C]"
                     >
-                        <X className="size-4 text-[#15291C]" />
+                        <ArrowLeft className="size-[18px]" strokeWidth={2.35} />
                     </button>
-                    <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-[#15291C]">
-                            {post.title}
+                    <UserAvatar
+                        name={post.authorFullName || post.author}
+                        src={post.authorAvatar ?? undefined}
+                        size={36}
+                    />
+                    <div className="flex min-w-0 flex-1 flex-col items-start text-left">
+                        <p className="truncate text-[14.5px] leading-[1.2] font-extrabold tracking-[-0.2px] text-[#15291C]">
+                            {post.authorFullName || post.author}
                         </p>
-                        <p className="truncate text-[11.5px] text-[#5C6B62]">
+                        <p className="truncate text-[11.5px] font-medium text-[#5C6B62]">
                             @{post.author}
                             {created ? ` · ${created}` : ""}
                         </p>
                     </div>
+                    <span className="shrink-0 rounded-full bg-[#F0A020]/14 px-2.5 py-1 text-[10.5px] font-bold text-[#9A6206]">
+                        на модерации
+                    </span>
                 </div>
 
                 <div className="min-h-0 flex-1 overflow-y-auto pb-4">
@@ -138,7 +154,7 @@ export function PostDetailSheet({
                         обрезанный край может быть ровно тем, из-за чего пост
                         отклоняют. */}
                     {photos.length > 0 ? (
-                        <div className="flex justify-center bg-[#15291C]">
+                        <div className="mx-3 flex justify-center overflow-hidden rounded-[18px] bg-[#15291C]">
                             <div className="relative aspect-[4/5] max-h-[58vh] w-full max-w-lg">
                                 <Image
                                     src={photos[shot]}
@@ -179,7 +195,7 @@ export function PostDetailSheet({
                             </div>
                         </div>
                     ) : (
-                        <div className="grid h-40 place-items-center bg-[#E7ECE8] text-sm font-medium text-[#5C6B62]">
+                        <div className="mx-3 grid h-40 place-items-center rounded-[18px] bg-[rgba(20,40,28,0.05)] text-sm font-medium text-[#5C6B62]">
                             Пост без фотографий
                         </div>
                     )}
@@ -202,45 +218,63 @@ export function PostDetailSheet({
                         </div>
                     )}
 
-                    <div className="flex flex-col gap-3 px-4 pt-3">
-                        {/* ─── Оценка и описание целиком, без обрезки ─── */}
-                        {post.rating > 0 && (
-                            <p className="flex items-center gap-1.5 text-sm font-semibold text-[#15291C]">
-                                <Star className="size-4 fill-[#FFB400] text-[#FFB400]" />
-                                {post.rating.toFixed(1)} из 5
-                            </p>
-                        )}
+                    {/* Название, место и оценка — той же вёрсткой, что в ленте:
+                        модератор смотрит на пост тем же взглядом, что читатель. */}
+                    <div className="px-4 pt-3 pb-1">
+                        <h3 className="text-[19px] leading-[1.2] font-extrabold tracking-[-0.4px] text-[#15291C]">
+                            {post.title}
+                        </h3>
+                    </div>
+                    <div className="flex items-center justify-between gap-2.5 px-4 pt-1 pb-2.5">
+                        <div className="inline-flex min-w-0 items-center gap-1.5 rounded-[9px] bg-[rgba(20,40,28,0.05)] px-2.5 py-[5px] text-[12.5px] font-semibold text-[#13251a]">
+                            <MapPin className="size-[11px] shrink-0" strokeWidth={2.2} />
+                            <span className="overflow-hidden text-ellipsis whitespace-nowrap">
+                                {post.restaurant || "Заведение не указано"}
+                            </span>
+                        </div>
+                        {post.rating > 0 && <RatingStars rating={post.rating} />}
+                    </div>
 
-                        {post.description ? (
-                            <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-[#3A4A40]">
-                                {post.description}
-                            </p>
-                        ) : (
-                            <p className="text-[13px] text-[#8A958E]">Без описания.</p>
-                        )}
+                    {post.description ? (
+                        <p className="mx-3 mb-3 rounded-[14px] bg-[rgba(20,40,28,0.04)] px-3 py-2.5 font-[family-name:var(--font-roboto)] text-[15px] leading-[1.62] font-medium text-pretty whitespace-pre-wrap text-[#15291C]">
+                            {post.description}
+                        </p>
+                    ) : (
+                        <p className="mx-3 mb-3 rounded-[14px] bg-[rgba(20,40,28,0.04)] px-3 py-2.5 text-[13px] font-medium text-[#8A958E]">
+                            Без описания.
+                        </p>
+                    )}
 
-                        {post.tags.length > 0 && (
-                            <div className="flex flex-wrap gap-1.5">
+                    {post.tags.length > 0 && (
+                        <div className="px-3.5 pb-3">
+                            <span
+                                aria-hidden="true"
+                                className="mb-2 block h-px w-full rounded-full bg-[rgba(20,40,28,0.1)]"
+                            />
+                            <div className="flex flex-wrap items-center gap-1.5">
                                 {post.tags.map((t) => (
                                     <span
                                         key={t}
-                                        className="rounded-full bg-white px-2.5 py-1 text-[11.5px] font-medium text-[#15291C] ring-1 ring-black/5"
+                                        className="rounded-full bg-[rgba(20,40,28,0.05)] px-2.5 py-1 text-[12px] font-semibold text-[#13251a]"
                                     >
                                         #{t}
                                     </span>
                                 ))}
                             </div>
-                        )}
+                        </div>
+                    )}
+
+                    {/* Ниже — рабочая часть: то, чего в ленте нет и быть не должно. */}
+                    <div className="flex flex-col gap-3 px-4 pt-1">
 
                         {/* ─── Что появится в каталоге ───
                             Главный блок разбора: одобрение создаёт эти записи, и
                             отменить это уже нельзя. */}
-                        <section className="flex flex-col gap-2.5 rounded-2xl bg-white px-4 py-3.5 ring-1 ring-black/5">
+                        <section className="flex flex-col gap-2.5 rounded-[18px] border border-white/60 bg-white/70 px-4 py-3.5 shadow-[0_4px_14px_rgba(20,40,28,0.06)] backdrop-blur-[12px]">
                             <p className="text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
                                 Появится в каталоге
                             </p>
 
-                            <Row label="Позиция" value={post.title} />
                             {/* Блюдо угадано системой по названию позиции. Модератор
                                 соглашается или меняет — от блюда зависят кухня и виды. */}
                             <div className="flex items-center justify-between gap-3">
@@ -310,7 +344,7 @@ export function PostDetailSheet({
                         </section>
 
                         {post.warnings.length > 0 && (
-                            <div className="flex flex-col gap-1 rounded-2xl bg-amber-50 px-4 py-3 ring-1 ring-amber-200">
+                            <div className="flex flex-col gap-1 rounded-[18px] bg-amber-50/90 px-4 py-3 ring-1 ring-amber-200/70 backdrop-blur-[12px]">
                                 {post.warnings.map((warning) => (
                                     <p
                                         key={warning}
@@ -325,7 +359,7 @@ export function PostDetailSheet({
 
                         {/* Похожие позиции в том же заведении — подсказка «это дубль?». */}
                         {post.similarMenuItems.length > 0 && (
-                            <div className="flex flex-col gap-1 rounded-2xl bg-white px-4 py-3 ring-1 ring-black/5">
+                            <div className="flex flex-col gap-1 rounded-[18px] border border-white/60 bg-white/70 px-4 py-3 shadow-[0_4px_14px_rgba(20,40,28,0.06)] backdrop-blur-[12px]">
                                 <p className="text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
                                     Похожие позиции здесь же
                                 </p>
@@ -338,7 +372,7 @@ export function PostDetailSheet({
                         )}
 
                         {post.restaurantIsNew && post.similarRestaurants.length > 0 && (
-                            <div className="flex flex-col gap-2 rounded-2xl bg-white px-4 py-3 ring-1 ring-black/5">
+                            <div className="flex flex-col gap-2 rounded-[18px] border border-white/60 bg-white/70 px-4 py-3 shadow-[0_4px_14px_rgba(20,40,28,0.06)] backdrop-blur-[12px]">
                                 <p className="text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
                                     Это то же место?
                                 </p>
@@ -377,11 +411,11 @@ export function PostDetailSheet({
                 {/* ─── Решение ───
                     Закреплено внизу: до кнопок в конце длинного описания пришлось
                     бы прокручивать весь разбор. */}
-                <div className="flex shrink-0 gap-2 border-t border-black/5 bg-white/90 px-4 py-3 backdrop-blur">
+                <div className="flex shrink-0 gap-2 border-t border-white/60 bg-white/70 px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] backdrop-blur-[20px] backdrop-saturate-[180%]">
                     <Button
                         type="button"
                         variant="outline"
-                        className="flex-1 gap-1.5"
+                        className="h-11 flex-1 gap-1.5 rounded-full border-[rgba(20,40,28,0.14)] bg-white/80 text-[15px] font-semibold"
                         disabled={isPending}
                         onClick={() => onReject(post)}
                     >
@@ -390,7 +424,7 @@ export function PostDetailSheet({
                     </Button>
                     <Button
                         type="button"
-                        className="flex-1 gap-1.5 bg-[#1FA85C] text-white hover:bg-[#168B4A]"
+                        className="h-11 flex-1 gap-1.5 rounded-full bg-[#2ECC71] text-[15px] font-semibold text-white shadow-[0_8px_22px_rgba(46,204,113,0.35)] hover:bg-[#28B765]"
                         disabled={isPending}
                         onClick={() => onApprove(post, undefined, changedDish, changedTaxons)}
                     >
@@ -403,7 +437,7 @@ export function PostDetailSheet({
                     </Button>
                 </div>
             </div>
-        </div>
+        </>
     );
 }
 
