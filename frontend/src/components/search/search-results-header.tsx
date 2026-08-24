@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
 import { motion, useReducedMotion } from "motion/react";
 
+import { SortControl } from "@/components/search/sort-control";
 import { cn } from "@/lib/utils";
 
 import { ResultsPriceControl } from "./results-price-control";
@@ -19,6 +20,8 @@ import { useSearchSubmit } from "./use-search-submit";
 type SearchResultsHeaderProps = {
   initialQuery: string;
   categoryGroups: CategoryGroups;
+  /** Идёт ли текстовый поиск: от этого зависит имя порядка по умолчанию. */
+  hasQuery: boolean;
 };
 
 function canAnimate(shouldReduceMotion: boolean | null) {
@@ -28,6 +31,7 @@ function canAnimate(shouldReduceMotion: boolean | null) {
 export function SearchResultsHeader({
   initialQuery,
   categoryGroups,
+  hasQuery,
 }: SearchResultsHeaderProps) {
   const router = useRouter();
   const shouldReduceMotion = useReducedMotion();
@@ -81,8 +85,9 @@ export function SearchResultsHeader({
         <div className="hide-scroll flex items-center gap-2 overflow-x-auto px-3.5 pt-2.5 pb-1 max-[409px]:px-3 xl:hidden">
           <ResultsPriceControl />
           <ResultsCategoryControl groups={categoryGroups} />
+          <SortControl hasQuery={hasQuery} />
         </div>
-        <ResultsDesktopFilters groups={categoryGroups} />
+        <ResultsDesktopFilters groups={categoryGroups} hasQuery={hasQuery} />
       </Suspense>
     </header>
   );

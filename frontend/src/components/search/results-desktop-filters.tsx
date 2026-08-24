@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 
 import { CategoryModeToggle } from "@/components/categories/category-mode-toggle";
+import { SortOptionList, useSortControl } from "@/components/search/sort-control";
 import {
   PriceRangeSlider,
   PRICE_MAX,
@@ -39,7 +40,13 @@ function toNum(value: string | null, fallback: number) {
  * Слайдер цены сразу открыт (применяется с дебаунсом), категории — вкладками
  * Блюда/Кухни/Формат. На мобиле/узких экранах не показывается — там кнопки-шторки.
  */
-export function ResultsDesktopFilters({ groups }: { groups: CategoryGroups }) {
+export function ResultsDesktopFilters({
+  groups,
+  hasQuery,
+}: {
+  groups: CategoryGroups;
+  hasQuery: boolean;
+}) {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -111,8 +118,18 @@ export function ResultsDesktopFilters({ groups }: { groups: CategoryGroups }) {
     [matched, pushParams, tab]
   );
 
+  const sort = useSortControl(hasQuery);
+
   return (
     <aside className="hide-scroll fixed top-[88px] bottom-6 left-[calc(50%+286px)] z-30 hidden w-[300px] flex-col gap-4 overflow-y-auto xl:flex">
+      {/* Сортировка — первой: она про весь список, а не про его сужение. */}
+      <div className="rounded-[20px] border border-white/70 bg-white/70 p-4 shadow-[0_8px_24px_rgba(20,40,28,0.10)] backdrop-blur-[20px]">
+        <p className="mb-2 text-[12.5px] font-bold tracking-[0.3px] text-[#5C6B62] uppercase">
+          Сортировка
+        </p>
+        <SortOptionList options={sort.options} active={sort.active.value} onPick={sort.apply} />
+      </div>
+
       {/* Цена */}
       <div className="rounded-[20px] border border-white/70 bg-white/70 p-4 shadow-[0_8px_24px_rgba(20,40,28,0.10)] backdrop-blur-[20px]">
         <p className="mb-3 text-[12.5px] font-bold tracking-[0.3px] text-[#5C6B62] uppercase">
