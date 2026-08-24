@@ -68,7 +68,7 @@ export function DietChips({
         Особенности блюда
       </h2>
       <p className="mb-2.5 px-1 text-[12.5px] leading-[1.4] font-medium text-[#5C6B62]">
-        Отметьте, если знаете — по этому людям потом искать
+        Отметьте, что соответствует блюду
       </p>
       <div className="flex flex-wrap gap-2">
         {options.map((option) => {

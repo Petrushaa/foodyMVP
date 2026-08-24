@@ -378,7 +378,7 @@ function PhotoUpload({
         Фотография блюда
       </h2>
       <p className="mt-1 mb-2 font-[family-name:var(--font-roboto)] text-[13px] leading-snug font-medium text-[#5C6B62]">
-        Мин. 1 фото. Перетаскивайте, чтобы менять порядок — первое станет главным. Карандаш — обрезать фото.
+        Мин. 1 фото.
       </p>
 
       <div
