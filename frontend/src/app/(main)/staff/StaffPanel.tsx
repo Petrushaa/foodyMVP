@@ -44,6 +44,11 @@ export interface PendingPost {
     restaurantIsNew: boolean;
     /** Тип блюда и категории: по ним позиция попадёт в фильтры. */
     dishType: string | null;
+    /** Заполнено, когда позиция не попадёт ни в один раздел каталога. */
+    catalogWarning: {
+        text: string;
+        cuisineHint: { name: string; reason: string } | null;
+    } | null;
     taxons: PostTaxon[];
     /** Размер порции, как его указал автор. */
     size: string;

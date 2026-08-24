@@ -219,7 +219,17 @@ def guess_dish_type(name):
         if variant in normalized:
             return normalized[variant]
 
-    # 2. Блюдо стоит словом в названии: «Шаурма классическая» → Шаурма.
+    # 2. Синонимы, которые ведёт модератор: «шаверма» → Шаурма. Стоят раньше
+    #    поиска по слову, потому что это прямое указание человека, а не догадка.
+    from ..models import DishTypeAlias
+
+    alias = DishTypeAlias.objects.filter(
+        normalized_name__in=variants,
+    ).select_related('dish_type').first()
+    if alias:
+        return alias.dish_type
+
+    # 3. Блюдо стоит словом в названии: «Шаурма классическая» → Шаурма.
     #    Идём от длинных названий к коротким, иначе «Салат Цезарь» проиграет
     #    «Салату», случись он в справочнике.
     for dish_key, dish in sorted(normalized.items(), key=lambda p: -len(p[0])):
@@ -227,7 +237,7 @@ def guess_dish_type(name):
             if dish_key in variant.split() or f' {dish_key} ' in f' {variant} ':
                 return dish
 
-    # 3. Нечёткое сравнение — ловит опечатки и формы слова.
+    # 4. Нечёткое сравнение — ловит опечатки и формы слова.
     match = (
         DishType.objects
         .annotate(similarity=TrigramSimilarity('name', text))

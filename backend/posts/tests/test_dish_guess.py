@@ -167,3 +167,111 @@ class TestApproval:
 
         assert post.menu_item.dish_type is None
         assert post.status == Post.STATUS_APPROVED
+
+
+@pytest.mark.django_db
+class TestAliases:
+    """
+    Синонимы блюд: каждая правка модератора делает угадывание умнее.
+
+    Без них он чинит одно и то же написание бесконечно — правка никуда не
+    записывается, и следующий такой пост приходит с той же ошибкой.
+    """
+
+    def test_alias_is_used_when_guessing(self):
+        from posts.models import DishTypeAlias
+
+        DishTypeAlias.objects.create(
+            dish_type=DishType.objects.get(name='Шаурма'), name='Шаверма',
+        )
+
+        assert guess_dish_type('Шаверма').name == 'Шаурма'
+
+    def test_moderator_correction_is_remembered(
+        self, author, restaurant, make_post, moderator,
+    ):
+        from posts.models import DishTypeAlias
+
+        post = make_post(author, restaurant=restaurant, item='Шаверма по-питерски')
+        post.draft_dish_type = None
+        post.save(update_fields=['draft_dish_type'])
+
+        approve_post(post, moderator, dish_type=DishType.objects.get(name='Шаурма'))
+
+        alias = DishTypeAlias.objects.get(name='Шаверма по-питерски')
+        assert alias.dish_type.name == 'Шаурма'
+        # И в следующий раз система справится без модератора.
+        assert guess_dish_type('Шаверма по-питерски').name == 'Шаурма'
+
+    def test_correction_to_the_same_name_is_not_stored(
+        self, author, restaurant, make_post, moderator,
+    ):
+        """Название и так совпадает с блюдом — синоним ничего не добавит."""
+        from posts.models import DishTypeAlias
+
+        post = make_post(author, restaurant=restaurant, item='Шаурма')
+        post.draft_dish_type = None
+        post.save(update_fields=['draft_dish_type'])
+
+        approve_post(post, moderator, dish_type=DishType.objects.get(name='Шаурма'))
+
+        assert not DishTypeAlias.objects.filter(name='Шаурма').exists()
+
+
+@pytest.mark.django_db
+class TestCatalogWarning:
+    """
+    Позиция без блюда выпадает из каталога целиком. Модератор должен видеть
+    это до решения, а не узнавать по жалобам.
+    """
+
+    def test_no_warning_when_dish_is_known(self, author, restaurant, make_post):
+        from posts.serializers import ModerationPostSerializer
+
+        post = make_post(author, restaurant=restaurant, item='Шаурма')
+        post.draft_dish_type = DishType.objects.get(name='Шаурма')
+        post.save(update_fields=['draft_dish_type'])
+
+        assert ModerationPostSerializer(post).data['catalog_warning'] is None
+
+    def test_warning_when_dish_is_unknown(self, author, restaurant, make_post):
+        from posts.serializers import ModerationPostSerializer
+
+        post = make_post(author, restaurant=restaurant, item='Цзяньбин')
+        post.draft_dish_type = None
+        post.save(update_fields=['draft_dish_type'])
+
+        warning = ModerationPostSerializer(post).data['catalog_warning']
+        assert warning is not None
+        assert 'не попадёт' in warning['text']
+
+    def test_cuisine_is_suggested_by_the_restaurant(
+        self, author, restaurant, make_post, moderator,
+    ):
+        """
+        У «Ролльной» уже есть японская позиция — новая безымянная почти
+        наверняка тоже японская.
+        """
+        from posts.serializers import ModerationPostSerializer
+
+        known = make_post(author, restaurant=restaurant, item='Роллы')
+        known.draft_dish_type = DishType.objects.get(name='Роллы')
+        known.save(update_fields=['draft_dish_type'])
+        approve_post(known, moderator)
+
+        unknown = make_post(author, restaurant=restaurant, item='Цзяньбин')
+        unknown.draft_dish_type = None
+        unknown.save(update_fields=['draft_dish_type'])
+
+        hint = ModerationPostSerializer(unknown).data['catalog_warning']['cuisine_hint']
+        assert hint['name'] == 'Японская'
+        assert 'в этом заведении' in hint['reason']
+
+    def test_no_hint_without_neighbours(self, author, restaurant, make_post):
+        from posts.serializers import ModerationPostSerializer
+
+        post = make_post(author, restaurant=restaurant, item='Цзяньбин')
+        post.draft_dish_type = None
+        post.save(update_fields=['draft_dish_type'])
+
+        assert ModerationPostSerializer(post).data['catalog_warning']['cuisine_hint'] is None

@@ -2,6 +2,7 @@ from django.contrib import admin
 from django.utils.html import format_html
 
 from .models import (
+    DishTypeAlias,
     Tag, Taxon, DishType, Brand, Restaurant, RestaurantAlias,
     MenuItem, MenuItemAlias, MenuItemTag,
     Post, PostImage, PostStatistics, PostLike, PostSave,
@@ -200,3 +201,16 @@ admin.site.register(PostStatistics)
 admin.site.register(PostLike)
 admin.site.register(PostSave)
 admin.site.register(CommentLike)
+
+
+@admin.register(DishTypeAlias)
+class DishTypeAliasAdmin(admin.ModelAdmin):
+    """
+    Написания блюд, которые система не узнала сама. Копятся от правок
+    модератора; сюда заходят, чтобы убрать ошибочную запись.
+    """
+
+    list_display = ('name', 'dish_type', 'created_at')
+    list_filter = ('dish_type',)
+    search_fields = ('name', 'dish_type__name')
+    autocomplete_fields = ('dish_type',)

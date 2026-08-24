@@ -96,6 +96,19 @@ export default async function StaffPage() {
         // Тип и категории решают, в какие фильтры попадёт позиция, — модератор
         // должен видеть их до одобрения, а не узнавать по жалобам.
         dishType: p.will_create?.menu_item?.dish_type || null,
+        // Позиция без блюда выпадает из каталога — модератор должен видеть это
+        // до решения, а не узнавать по жалобам.
+        catalogWarning: p.catalog_warning
+            ? {
+                  text: p.catalog_warning.text as string,
+                  cuisineHint: p.catalog_warning.cuisine_hint
+                      ? {
+                            name: p.catalog_warning.cuisine_hint.name as string,
+                            reason: p.catalog_warning.cuisine_hint.reason as string,
+                        }
+                      : null,
+              }
+            : null,
         taxons: (p.will_create?.menu_item?.taxons || []).map((t: any) => ({
             id: t.id,
             name: t.name,

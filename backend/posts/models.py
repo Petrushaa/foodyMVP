@@ -297,6 +297,51 @@ class DishType(models.Model):
         return self.name
 
 
+class DishTypeAlias(models.Model):
+    """
+    Другое написание блюда: «шаверма» → «Шаурма». Ведёт модератор.
+
+    Блюдо человек больше не выбирает — его угадывает система по названию
+    позиции. Синонимы делают это угадывание умнее с каждой правкой: модератор
+    один раз поправил, и следующая «шаверма» распознается сама.
+
+    Без них правка модератора никуда не записывается, и он чинит одно и то же
+    написание бесконечно. Ровно так это уже устроено у заведений.
+    """
+
+    dish_type = models.ForeignKey(
+        DishType, on_delete=models.CASCADE, related_name='aliases',
+        verbose_name='Блюдо',
+    )
+    name = models.CharField(max_length=100, verbose_name='Написание')
+    normalized_name = models.CharField(
+        max_length=100, db_index=True, editable=False, verbose_name='Ключ поиска',
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        verbose_name = 'Синоним блюда'
+        verbose_name_plural = 'Синонимы блюд'
+        constraints = [
+            models.UniqueConstraint(
+                fields=['normalized_name'], name='dishtypealias_unique_name',
+            ),
+        ]
+        indexes = [
+            GinIndex(
+                fields=['normalized_name'], name='dishtypealias_name_trgm',
+                opclasses=['gin_trgm_ops'],
+            ),
+        ]
+
+    def __str__(self):
+        return f'{self.name} → {self.dish_type.name}'
+
+    def save(self, *args, **kwargs):
+        self.normalized_name = normalize_name(self.name)
+        super().save(*args, **kwargs)
+
+
 class Brand(models.Model):
     """Сеть заведений. Проставляется модератором вручную."""
 

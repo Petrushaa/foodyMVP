@@ -76,6 +76,11 @@ export async function createPost(formData: FormData) {
     // из названия позиции, а модератор подтверждает или меняет. На неполном
     // каталоге выбор из списка означал бы постоянное «моего блюда нет».
 
+    // Особенности блюда от автора: диета и острота. Классификацию сервер
+    // отвергнет — она приходит от блюда и одинакова для всех его позиций.
+    const taxonIds = formData.getAll("taxonIds") as string[];
+    taxonIds.forEach((id) => newFormData.append("taxon_ids", id));
+
     // Обработка тегов
     const tags = formData.getAll("tags") as string[];
     tags.forEach(tag => newFormData.append("tags_list", tag));

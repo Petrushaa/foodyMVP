@@ -435,7 +435,9 @@ class PostCreateSerializer(serializers.ModelSerializer):
         """
         if attrs.get('draft_dish_type') or attrs.get('taxon_ids'):
             raise serializers.ValidationError(
-                'У выбранной позиции уже есть тип блюда и категории, менять их нельзя.'
+                'Эта позиция уже описана, её свойства менять нельзя. Если вы ели '
+                'другое — например, овощную шаурму вместо мясной, — заведите '
+                'новую позицию с уточнённым названием: это разные позиции.'
             )
 
         price = attrs.get('price')
@@ -641,6 +643,7 @@ class ModerationPostSerializer(serializers.ModelSerializer):
     similar_restaurants = serializers.SerializerMethodField()
     price_change = serializers.SerializerMethodField()
     warnings = serializers.SerializerMethodField()
+    catalog_warning = serializers.SerializerMethodField()
 
     class Meta:
         model = Post
@@ -648,7 +651,8 @@ class ModerationPostSerializer(serializers.ModelSerializer):
             'id', 'user', 'description', 'size', 'author_rating', 'images', 'tags',
             'created_at', 'status', 'menu_item',
             'will_create', 'similar_menu_items', 'similar_restaurants',
-            'price_change', 'warnings', 'possible_duplicate', 'looks_suspicious',
+            'price_change', 'warnings', 'catalog_warning',
+            'possible_duplicate', 'looks_suspicious',
         ]
 
     def get_will_create(self, obj):
@@ -674,6 +678,37 @@ class ModerationPostSerializer(serializers.ModelSerializer):
                 'taxons': TaxonSerializer(obj.draft_taxons.all(), many=True).data,
                 'price': obj.proposed_price,
             },
+        }
+
+    def get_catalog_warning(self, obj):
+        """
+        Предупреждение о позиции, которая выпадет из каталога.
+
+        Без блюда у позиции не будет ни кухни, ни вида: её не найти ни в одном
+        разделе, только точным названием. Модератор должен видеть это до
+        решения, а не узнавать по жалобам.
+
+        Не блокируем: на неполном справочнике запрет остановил бы очередь.
+        Подсказываем кухню по соседям в заведении — если остальные позиции там
+        китайские, новая почти наверняка тоже.
+        """
+        from .services.moderation import suggest_cuisine
+
+        if obj.draft_dish_type_id or obj.menu_item_id:
+            return None
+
+        hint = suggest_cuisine(obj)
+        return {
+            'text': 'Блюдо не определилось: позиция не попадёт ни в один раздел '
+                    'каталога, её найдут только точным названием.',
+            'cuisine_hint': (
+                {
+                    'id': hint[0].id,
+                    'name': hint[0].name,
+                    'reason': f'в этом заведении {hint[1]} из {hint[2]} позиций',
+                }
+                if hint else None
+            ),
         }
 
     def get_similar_restaurants(self, obj):

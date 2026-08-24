@@ -226,7 +226,37 @@ export function PostDetailSheet({
                             </p>
 
                             <Row label="Позиция" value={post.title} />
-                            {post.dishType && <Row label="Тип блюда" value={post.dishType} />}
+                            {/* Блюдо угадано системой по названию позиции. Модератор
+                                соглашается или меняет — от блюда зависят кухня и виды. */}
+                            <div className="flex items-center justify-between gap-3">
+                              <span className="shrink-0 text-[11.5px] font-medium text-[#8A958E]">Блюдо</span>
+                              <select
+                                value={dishId}
+                                onChange={(e) => setDishId(e.target.value ? Number(e.target.value) : "")}
+                                className="min-w-0 max-w-[62%] rounded-lg bg-[#F1F5F2] px-2 py-1 text-right text-[13px] font-semibold text-[#15291C] outline-none"
+                              >
+                                <option value="">— не определено —</option>
+                                {dishOptions.map((d) => (
+                                  <option key={d.id} value={d.id}>
+                                    {d.emoji} {d.label}
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+
+                            {post.catalogWarning && (
+                              <div className="rounded-xl bg-amber-50 px-3 py-2 ring-1 ring-amber-200">
+                                <p className="text-[11.5px] leading-[1.45] font-medium text-amber-900">
+                                  {post.catalogWarning.text}
+                                </p>
+                                {post.catalogWarning.cuisineHint && (
+                                  <p className="mt-1 text-[11.5px] leading-[1.45] text-amber-900/85">
+                                    Похоже на кухню <b>{post.catalogWarning.cuisineHint.name}</b> —{" "}
+                                    {post.catalogWarning.cuisineHint.reason}.
+                                  </p>
+                                )}
+                              </div>
+                            )}
                             {post.size && <Row label="Порция" value={post.size} />}
                             {post.price && <Row label="Цена" value={post.price} />}
 

@@ -124,6 +124,28 @@ def collect_taxons(post):
     return taxons
 
 
+def remember_dish_alias(dish_type, name):
+    """
+    Запоминает написание блюда, которое система не узнала.
+
+    Смысл тот же, что у синонимов заведений: каждая правка модератора делает
+    угадывание умнее. Поправил «шаверму» на «Шаурму» — следующая распознается
+    сама, и руками её больше трогать не придётся.
+
+    Пишем название позиции целиком: именно его увидит система в следующий раз.
+    Совпадающее с самим блюдом не пишем — там и так угадывается.
+    """
+    from ..models import DishTypeAlias
+
+    key = normalize_name(name or '')
+    if not key or key == normalize_name(dish_type.name):
+        return
+
+    DishTypeAlias.objects.get_or_create(
+        normalized_name=key, defaults={'dish_type': dish_type, 'name': name.strip()},
+    )
+
+
 def _apply_price_proposal(post, menu_item, accept):
     """
     Решение по цене принимается **отдельно от решения по посту**: хороший пост
@@ -164,6 +186,9 @@ def approve_post(post, moderator, *, menu_item=None, restaurant=None,
         raise ModerationError('Пост удалён автором.')
 
     if dish_type is not None:
+        # Модератор поправил догадку — запоминаем написание, чтобы в следующий
+        # раз система справилась без него.
+        remember_dish_alias(dish_type, post.draft_menu_item_name)
         post.draft_dish_type = dish_type
 
     target = menu_item or post.menu_item
@@ -252,3 +277,49 @@ def similar_menu_items(post, limit=5):
         .filter(similarity__gt=0.3)
         .order_by('-similarity')[:limit]
     )
+
+
+def suggest_cuisine(post):
+    """
+    Подсказывает кухню позиции, у которой не угадалось блюдо.
+
+    Без блюда позиция остаётся вообще без разметки и выпадает из каталога
+    целиком: её не найти ни в «Китайской», ни в «Супах», только точным
+    названием. А неполный раздел хуже пустого — человек решит, что китайского
+    в городе мало.
+
+    Считаем по соседям в том же заведении: если у «Китайской лапшичной»
+    остальные позиции китайские, новая почти наверняка тоже. Это самая
+    надёжная подсказка из доступных и самая дешёвая — один запрос.
+
+    Возвращает (кухня, сколько позиций за неё, всего позиций) или None.
+    """
+    from collections import Counter
+
+    from ..models import MenuItem, Taxon
+
+    restaurant = post.draft_restaurant or (
+        post.menu_item.restaurant if post.menu_item_id else None
+    )
+    if restaurant is None:
+        return None
+
+    siblings = MenuItem.objects.filter(
+        restaurant=restaurant, status=MenuItem.STATUS_ACTIVE,
+    ).prefetch_related('taxons')
+
+    counts = Counter()
+    total = 0
+    for item in siblings:
+        cuisine = next(
+            (t for t in item.taxons.all() if t.kind == Taxon.KIND_CUISINE), None,
+        )
+        if cuisine is not None:
+            counts[cuisine] += 1
+            total += 1
+
+    if not counts:
+        return None
+
+    cuisine, votes = counts.most_common(1)[0]
+    return cuisine, votes, total

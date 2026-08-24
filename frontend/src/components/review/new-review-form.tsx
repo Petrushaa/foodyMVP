@@ -28,6 +28,7 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 import { PhotoCropModal } from "@/components/review/photo-crop-modal";
 
 import { CategorySelectionScreen } from "@/components/categories/category-selection-screen";
+import { DietChips } from "@/components/review/diet-chips";
 import { GlassSurface } from "@/components/feed/glass-surface";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -657,6 +658,8 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
   // true — категорию выбрал юзер вручную (авто-распознавание больше не вмешивается).
   const [categoryTouched, setCategoryTouched] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
+  // Особенности блюда: диета и острота. Только то, что знает съевший.
+  const [dietIds, setDietIds] = useState<number[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [showRequiredAlert, setShowRequiredAlert] = useState(false);
   const [showDraftDialog, setShowDraftDialog] = useState(false);
@@ -775,6 +778,7 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
     // к существующему заведению, и опечатка в названии дубля не создаст.
     if (placeId !== null) fd.append("restaurantId", String(placeId));
     tags.forEach((t) => fd.append("tags", t));
+    dietIds.forEach((id) => fd.append("taxonIds", String(id)));
     photos.forEach((file) => fd.append("image", file));
 
     try {
