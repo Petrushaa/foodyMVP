@@ -30,7 +30,6 @@ import {
   matchCategoryByName,
   type ApiCategory,
   type FoodCategory,
-  type PlaceCategory,
 } from "@/lib/categories";
 import type { Palette } from "@/lib/mock-data";
 import { TAB_PARAM } from "@/components/search/results-category-control";

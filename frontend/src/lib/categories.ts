@@ -82,29 +82,6 @@ function pickCategoriesById(categories: FoodCategory[], ids: string[]) {
   });
 }
 
-/** Категория заведения (тип точки: фастфуд, кафе и т.п.). */
-export type PlaceCategory = {
-  id: string;
-  label: string;
-  emoji: string;
-};
-
-// Заглушка на фронте. TODO: заменить на справочник категорий заведений с бэка.
-const PLACE_CATEGORIES: PlaceCategory[] = [
-  { id: "fastfood", label: "Фастфуд", emoji: "🍟" },
-  { id: "cafe", label: "Кафе", emoji: "☕" },
-  { id: "restaurant", label: "Ресторан", emoji: "🍽️" },
-  { id: "coffee", label: "Кофейня", emoji: "🥐" },
-  { id: "bakery", label: "Пекарня", emoji: "🥖" },
-  { id: "bar", label: "Бар", emoji: "🍺" },
-  { id: "pizzeria", label: "Пиццерия", emoji: "🍕" },
-  { id: "sushi-bar", label: "Суши-бар", emoji: "🍣" },
-  { id: "canteen", label: "Столовая", emoji: "🥘" },
-  { id: "street-food", label: "Стритфуд", emoji: "🌭" },
-  { id: "dessert", label: "Десерты", emoji: "🍰" },
-  { id: "pub", label: "Паб", emoji: "🍻" },
-];
-
 /**
  * Справочники приходят с бэкенда: там 125 блюд и 58 категорий по четырём осям,
  * и там же у каждой записи лежит иконка — её выбирает админ, а не разработчик.
@@ -174,11 +151,14 @@ export async function getCuisineCategories() {
  * интерфейсе это единственная вкладка с множественным выбором.
  */
 export async function getTypeCategories(): Promise<FoodCategory[]> {
-  const loaded = await loadTaxons("type", "types");
-  if (loaded) return loaded;
-  return PLACE_CATEGORIES.map((c) => ({
-    id: c.id, label: c.label, emoji: c.emoji, mode: "types" as const,
-  }));
+  // Не ответил справочник — отдаём пусто, а не запасной список.
+  //
+  // Запасным тут стояли категории заведений: «Фастфуд, Кафе, Ресторан,
+  // Кофейня». Виду еды из них соответствует только первая, а по остальным
+  // фильтр уходил на бэкенд слагами, которых в справочнике нет, и молча
+  // возвращал пустую выдачу. Отсутствие кнопок честнее кнопок, ведущих в
+  // никуда.
+  return (await loadTaxons("type", "types")) ?? [];
 }
 
 /**
@@ -193,10 +173,6 @@ export async function getPopularDishCategories() {
 export async function getPopularCuisineCategories() {
   const all = await getCuisineCategories();
   return all.length > 12 ? all.slice(0, 12) : all;
-}
-
-export function getPlaceCategories(): PlaceCategory[] {
-  return PLACE_CATEGORIES.map((category) => ({ ...category }));
 }
 
 /**
@@ -271,129 +247,4 @@ export async function fetchPopularTags(accessToken?: string, limit = 12): Promis
   } catch {
     return [];
   }
-}
-
-// ── Авто-распознавание категории блюда по названию (способы 1+2) ──────────────
-// 1) сопоставление по ключевым словам/синонимам (подстрока в нормализованном
-//    названии); 2) fuzzy — терпимость к опечаткам (расстояние Левенштейна).
-// Ключи хранятся уже нормализованными: нижний регистр, ё→е, без дефисов.
-const DISH_CATEGORY_KEYWORDS: Record<string, string[]> = {
-  pizza: ["пицц"],
-  burgers: ["бургер"],
-  sandwiches: ["сэндвич", "сендвич", "сандвич", "панини", "чиабатт"],
-  shawarma: ["шаурм", "шаверм", "шаварм", "донер", "дюрюм"],
-  "sushi-rolls": [
-    "суши",
-    "ролл",
-    "филадельфия",
-    "калифорни",
-    "нигири",
-    "сашими",
-    "урамаки",
-    "темаки",
-  ],
-  ramen: ["рамен", "рамэн"],
-  wok: ["вок", "удон", "якисоба", "фунчоза"],
-  pasta: [
-    "паста",
-    "спагетти",
-    "карбонара",
-    "болонье",
-    "феттучини",
-    "лазань",
-    "пенне",
-    "тальятелле",
-    "равиоли",
-    "ньокки",
-  ],
-  tacos: ["тако", "буррито", "кесадиль", "начос", "энчилада", "фахитас"],
-  "tom-yum": ["том ям", "томям"],
-  poke: ["поке"],
-  khachapuri: ["хачапур"],
-  steaks: ["стейк", "рибай", "стриплойн", "миньон", "антрекот", "томагавк"],
-  cheesecake: ["чизкейк"],
-};
-
-function normalizeDishText(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/ё/g, "е")
-    .replace(/[^a-zа-я0-9 ]+/gi, " ")
-    .replace(/\s+/g, " ")
-    .trim();
-}
-
-function levenshtein(a: string, b: string): number {
-  const m = a.length;
-  const n = b.length;
-  if (m === 0) return n;
-  if (n === 0) return m;
-  const dp = Array.from({ length: n + 1 }, (_, i) => i);
-  for (let i = 1; i <= m; i++) {
-    let prev = dp[0];
-    dp[0] = i;
-    for (let j = 1; j <= n; j++) {
-      const tmp = dp[j];
-      dp[j] =
-        a[i - 1] === b[j - 1]
-          ? prev
-          : Math.min(prev, dp[j], dp[j - 1]) + 1;
-      prev = tmp;
-    }
-  }
-  return dp[n];
-}
-
-/**
- * Определяет категорию блюда по названию. Сначала — точные вхождения ключевых
- * слов (например «грибная шаурма» → Шаурма), затем — fuzzy по опечаткам
- * («шаверама», «пицаа»). Если ничего не подошло — возвращает null (юзер выберет
- * сам). Ищет только среди DISH_CATEGORIES.
- */
-export function detectDishCategory(name: string): FoodCategory | null {
-  const norm = normalizeDishText(name);
-  if (norm.length < 2) return null;
-  const tokens = norm.split(" ").filter(Boolean);
-
-  let bestId: string | null = null;
-  let bestScore = -Infinity;
-
-  // 1) Подстрока — надёжнее, поэтому даём высокий приоритет (score + 100).
-  for (const cat of DISH_CATEGORIES) {
-    for (const kw of DISH_CATEGORY_KEYWORDS[cat.id] ?? []) {
-      if (norm.includes(kw)) {
-        const score = kw.length + 100;
-        if (score > bestScore) {
-          bestScore = score;
-          bestId = cat.id;
-        }
-      }
-    }
-  }
-
-  // 2) Fuzzy по одиночным словам ≥4 символов (только если подстрока не нашлась).
-  if (bestId === null) {
-    for (const cat of DISH_CATEGORIES) {
-      for (const kw of DISH_CATEGORY_KEYWORDS[cat.id] ?? []) {
-        if (kw.includes(" ") || kw.length < 4) continue;
-        const maxDist = kw.length <= 6 ? 1 : 2;
-        for (const tok of tokens) {
-          if (tok.length < 3 || Math.abs(tok.length - kw.length) > maxDist) {
-            continue;
-          }
-          const dist = levenshtein(tok, kw);
-          if (dist <= maxDist) {
-            const score = kw.length - dist;
-            if (score > bestScore) {
-              bestScore = score;
-              bestId = cat.id;
-            }
-          }
-        }
-      }
-    }
-  }
-
-  if (bestId === null) return null;
-  return DISH_CATEGORIES.find((c) => c.id === bestId) ?? null;
 }

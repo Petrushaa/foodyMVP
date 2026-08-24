@@ -314,7 +314,7 @@ class TestManualTaxonsSurviveMaintenance:
 
     def test_resync_does_not_touch_manual_item(self, author, moderator, make_post):
         from posts.models import Taxon
-        from posts.services.stats import resync_menu_item_taxons
+        from posts.services.stats import planned_taxons
 
         post = make_post(author, item='Цзяньбин')
         post.draft_dish_type = None
@@ -323,21 +323,18 @@ class TestManualTaxonsSurviveMaintenance:
         menu_item = approve_post(post, moderator, taxons=[chinese]).menu_item
 
         assert menu_item.taxons_manual, 'одобрение должно пометить ручную правку'
-        assert resync_menu_item_taxons(menu_item) is False
-
-        menu_item.refresh_from_db()
+        assert planned_taxons(menu_item) is None, 'пересчёт обязан обойти её стороной'
         assert set(menu_item.taxons.all()) == {chinese}
 
     def test_untouched_item_still_catches_up(self, author, moderator, make_post, burger):
         """Обычные позиции команда по-прежнему обновляет — иначе она бесполезна."""
-        from posts.services.stats import resync_menu_item_taxons
+        from posts.services.stats import planned_taxons
 
         menu_item = approve_post(make_post(author), moderator).menu_item
         assert not menu_item.taxons_manual
         menu_item.taxons.clear()
 
-        assert resync_menu_item_taxons(menu_item) is True
-        assert set(menu_item.taxons.all()) == set(burger.default_taxons.all())
+        assert planned_taxons(menu_item) == set(burger.default_taxons.all())
 
     def test_resync_agrees_with_approval(self, author, moderator, make_post):
         """
@@ -348,7 +345,7 @@ class TestManualTaxonsSurviveMaintenance:
         раньше её подхватывал, и набор зависел от того, гоняли команду или нет.
         """
         from posts.models import Taxon
-        from posts.services.stats import resync_menu_item_taxons
+        from posts.services.stats import planned_taxons
 
         vegan = Taxon.objects.get(kind='type', slug='vegan')
         menu_item = approve_post(make_post(author), moderator).menu_item
@@ -358,19 +355,18 @@ class TestManualTaxonsSurviveMaintenance:
         second.draft_taxons.set([vegan])
         approve_post(second, moderator)
 
-        resync_menu_item_taxons(menu_item)
-        menu_item.refresh_from_db()
-        assert set(menu_item.taxons.all()) == after_approval
+        assert planned_taxons(menu_item) == after_approval
 
     def test_preview_matches_what_happens(self, author, moderator, make_post, burger):
-        """--dry-run обещает ровно то, что потом и произойдёт."""
-        from posts.services.stats import planned_taxons, resync_menu_item_taxons
+        """--dry-run обещает ровно то, что потом и применит команда."""
+        from django.core.management import call_command
+        from posts.services.stats import planned_taxons
 
         menu_item = approve_post(make_post(author), moderator).menu_item
         menu_item.taxons.clear()
 
         promised = planned_taxons(menu_item)
-        resync_menu_item_taxons(menu_item)
+        call_command('resync_taxons', verbosity=0)
         menu_item.refresh_from_db()
 
         assert set(menu_item.taxons.all()) == promised

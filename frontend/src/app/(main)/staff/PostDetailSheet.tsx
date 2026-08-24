@@ -18,6 +18,10 @@ import { RatingStars } from "@/components/feed/rating-stars";
 import { UserAvatar } from "@/components/feed/user-avatar";
 import { TaxonEditor } from "./TaxonEditor";
 import type { DishOption, PendingPost } from "./StaffPanel";
+import { cn } from "@/lib/utils";
+
+/** Рабочая карточка разбора: стеклянная подложка в тон ленте. */
+const PANEL = "flex flex-col rounded-[18px] border border-white/60 bg-white/70 shadow-[0_4px_14px_rgba(20,40,28,0.06)] backdrop-blur-[12px]";
 
 /**
  * Разбор поста перед решением.
@@ -270,7 +274,7 @@ export function PostDetailSheet({
                         {/* ─── Что появится в каталоге ───
                             Главный блок разбора: одобрение создаёт эти записи, и
                             отменить это уже нельзя. */}
-                        <section className="flex flex-col gap-2.5 rounded-[18px] border border-white/60 bg-white/70 px-4 py-3.5 shadow-[0_4px_14px_rgba(20,40,28,0.06)] backdrop-blur-[12px]">
+                        <section className={cn(PANEL, "gap-2.5 px-4 py-3.5")}>
                             <p className="text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
                                 Появится в каталоге
                             </p>
@@ -359,7 +363,7 @@ export function PostDetailSheet({
 
                         {/* Похожие позиции в том же заведении — подсказка «это дубль?». */}
                         {post.similarMenuItems.length > 0 && (
-                            <div className="flex flex-col gap-1 rounded-[18px] border border-white/60 bg-white/70 px-4 py-3 shadow-[0_4px_14px_rgba(20,40,28,0.06)] backdrop-blur-[12px]">
+                            <div className={cn(PANEL, "gap-1 px-4 py-3")}>
                                 <p className="text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
                                     Похожие позиции здесь же
                                 </p>
@@ -372,7 +376,7 @@ export function PostDetailSheet({
                         )}
 
                         {post.restaurantIsNew && post.similarRestaurants.length > 0 && (
-                            <div className="flex flex-col gap-2 rounded-[18px] border border-white/60 bg-white/70 px-4 py-3 shadow-[0_4px_14px_rgba(20,40,28,0.06)] backdrop-blur-[12px]">
+                            <div className={cn(PANEL, "gap-2 px-4 py-3")}>
                                 <p className="text-[11px] font-bold tracking-wide text-[#8A958E] uppercase">
                                     Это то же место?
                                 </p>

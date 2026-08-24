@@ -163,26 +163,6 @@ def search_menu_items(text, *, queryset=None, restaurant=None, limit=10,
     )
 
 
-def find_similar(name, restaurant, *, limit=5, threshold=TRIGRAM_THRESHOLD):
-    """
-    Похожие позиции в заведении — подсказка «может, это дубль?».
-
-    Используется и при создании поста (чтобы человек выбрал существующую),
-    и в модерации (чтобы модератор склеил дубль).
-    """
-    target = normalize_name(name)
-    if not target or restaurant is None:
-        return MenuItem.objects.none()
-
-    return (
-        MenuItem.objects
-        .filter(restaurant=restaurant, status=MenuItem.STATUS_ACTIVE)
-        .annotate(similarity=TrigramSimilarity('normalized_name', target))
-        .filter(similarity__gt=threshold)
-        .order_by('-similarity')[:limit]
-    )
-
-
 def guess_dish_type(name):
     """
     Угадывает блюдо справочника по названию позиции.
