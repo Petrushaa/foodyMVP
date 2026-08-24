@@ -93,7 +93,8 @@ export function SortControl({ hasQuery }: { hasQuery: boolean }) {
         // текущий выбор.
         aria-label={isDefault ? "Сортировка" : `Сортировка: ${active.label}`}
         className={cn(
-          "inline-flex shrink-0 items-center gap-2 rounded-full border-[1.5px] px-3.5 py-2 text-[13px] font-bold transition-colors",
+          "inline-flex shrink-0 items-center gap-2 rounded-full border-[1.5px] py-2 text-[13px] font-bold transition-colors",
+          isDefault ? "px-2.5 sm:px-3.5" : "px-3.5",
           isDefault
             ? "border-[rgba(20,40,28,0.14)] bg-white text-[#15291C]"
             : "border-[#2ECC71] bg-[#2ECC71] text-white",
@@ -101,7 +102,15 @@ export function SortControl({ hasQuery }: { hasQuery: boolean }) {
         )}
       >
         <ArrowUpDown size={15} strokeWidth={2.3} />
-        {isDefault ? "Сортировка" : active.label}
+        {/* На телефоне в исходном состоянии — только значок: ряд фильтров там
+            узкий, а слово ничего не добавляет к стрелкам. Выбранный порядок
+            подписываем всегда: иначе его не видно, не открыв шторку. Для
+            экранного диктора слово остаётся в aria-label кнопки. */}
+        {isDefault ? (
+          <span className="hidden sm:inline">Сортировка</span>
+        ) : (
+          active.label
+        )}
       </button>
 
       {!isDefault && (

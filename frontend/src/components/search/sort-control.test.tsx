@@ -85,6 +85,24 @@ describe("SortControl", () => {
       .toHaveAttribute("aria-checked", "false");
   });
 
+  it("на телефоне слово «Сортировка» скрыто, а выбранный порядок — нет", () => {
+    const { unmount } = render(<SortControl hasQuery={false} />);
+    // Значок остаётся, слово прячется до sm — ряд фильтров на телефоне узкий.
+    expect(screen.getByText("Сортировка")).toHaveClass("hidden", "sm:inline");
+    unmount();
+
+    setUrl("sort=reviews");
+    render(<SortControl hasQuery={false} />);
+    // А выбранный порядок подписан всегда: иначе его не видно, не открыв шторку.
+    expect(screen.getByText("Больше отзывов")).not.toHaveClass("hidden");
+  });
+
+  it("слово остаётся для экранного диктора, даже когда скрыто визуально", () => {
+    render(<SortControl hasQuery={false} />);
+
+    expect(screen.getByRole("button", { name: "Сортировка" })).toBeInTheDocument();
+  });
+
   it("мусор в адресе показывается как порядок по умолчанию", () => {
     // Бэкенд неизвестное значение игнорирует — кнопка не должна утверждать
     // обратное.
