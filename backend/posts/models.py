@@ -571,6 +571,14 @@ class MenuItem(models.Model):
         max_digits=10, decimal_places=2, null=True, blank=True, verbose_name='Цена, ₽'
     )
     price_confirmed_at = models.DateTimeField(null=True, blank=True, verbose_name='Цена подтверждена')
+    taxons_manual = models.BooleanField(
+        default=False, verbose_name='Категории проставлены вручную',
+        help_text=(
+            'Модератор задал категории сам, а не унаследовал от блюда. '
+            'resync_taxons такие позиции не трогает: команда догоняет '
+            'справочник, а догонять тут нечего — решение принято руками.'
+        ),
+    )
 
     # Денормализованные показатели, пересчитываются фоновой задачей.
     rating = models.FloatField(default=0.0, db_index=True, verbose_name='Рейтинг (для сортировки)')

@@ -195,9 +195,44 @@ def recalculate_all_menu_item_stats(batch_size=500):
     return updated
 
 
+def planned_taxons(menu_item):
+    """
+    Каким набор категорий станет после пересчёта. None — позицию не трогаем.
+
+    Отдельно от применения, чтобы `--dry-run` показывал ровно то, что потом и
+    произойдёт. Раньше предпросмотр считал по своей копии этой логики, копия
+    отстала от оригинала, и команда обещала не то, что делала.
+    """
+    from ..models import MEAT_SLUGS, MEATLESS_SLUGS, AUTHOR_TAXON_SLUGS
+
+    if menu_item.taxons_manual:
+        return None
+
+    current = set(menu_item.taxons.all())
+    from_dish = (
+        set(menu_item.dish_type.default_taxons.all())
+        if menu_item.dish_type_id else set()
+    )
+    # Свойства тарелки оставляем как есть, а не пересобираем по постам.
+    #
+    # Раньше они собирались со всех видимых постов позиции — и пересчёт
+    # расходился с одобрением: одобрение отметку второго автора отбрасывает
+    # («позиция уже описана, овощная шаурма — отдельная позиция»), а пересчёт
+    # её подхватывал. Одна и та же позиция получала разный набор в зависимости
+    # от того, гоняли команду или нет.
+    #
+    # Обновляем здесь только классификацию — ради неё команда и существует.
+    kept_author = {t for t in current if t.slug in AUTHOR_TAXON_SLUGS}
+
+    wanted = from_dish | kept_author
+    if any(t.slug in MEATLESS_SLUGS for t in kept_author):
+        wanted = {t for t in wanted if t.slug not in MEAT_SLUGS}
+    return wanted
+
+
 def resync_menu_item_taxons(menu_item):
     """
-    Пересобирает категории позиции из справочника и отметок авторов.
+    Пересобирает категории позиции из справочника.
 
     Категории копируются в позицию при одобрении, а не берутся ссылкой: правка
     справочника не должна задним числом переписывать тысячи готовых позиций.
@@ -208,30 +243,13 @@ def resync_menu_item_taxons(menu_item):
     Эта функция — способ догнать справочник осознанно, командой, а не молчаливым
     побочным эффектом чужой правки.
 
+    Позиции с ручной разметкой не трогает вовсе: там догонять нечего, решение
+    принял модератор.
+
     Возвращает True, если набор изменился.
     """
-    from ..models import MEAT_SLUGS, MEATLESS_SLUGS, AUTHOR_TAXON_SLUGS, Taxon
-
-    from_dish = (
-        set(menu_item.dish_type.default_taxons.all())
-        if menu_item.dish_type_id else set()
-    )
-    # Отметки авторов берём из всех видимых постов позиции: диету указывает тот,
-    # кто ел, и терять её при пересчёте нельзя.
-    from_authors = set(
-        Taxon.objects.filter(
-            draft_posts__in=_visible_posts(menu_item),
-            kind=Taxon.KIND_TYPE,
-            slug__in=AUTHOR_TAXON_SLUGS,
-        ).distinct()
-    )
-
-    wanted = from_dish | from_authors
-    if any(t.slug in MEATLESS_SLUGS for t in from_authors):
-        wanted = {t for t in wanted if t.slug not in MEAT_SLUGS}
-
-    current = set(menu_item.taxons.all())
-    if current == wanted:
+    wanted = planned_taxons(menu_item)
+    if wanted is None or set(menu_item.taxons.all()) == wanted:
         return False
 
     menu_item.taxons.set(wanted)

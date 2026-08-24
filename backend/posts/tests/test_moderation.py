@@ -300,3 +300,98 @@ class TestModeratorSetsTaxons:
         menu_item = approve_post(post, moderator).menu_item
 
         assert set(menu_item.taxons.all()) >= set(burger.default_taxons.all())
+
+
+@pytest.mark.django_db
+class TestManualTaxonsSurviveMaintenance:
+    """
+    Ручная разметка переживает обслуживание каталога.
+
+    resync_taxons догоняет справочник — но у позиции, размеченной руками,
+    догонять нечего. Особенно у позиции без блюда: там наследовать не от чего,
+    и ручная разметка была единственной. Команда обслуживания стирала её молча.
+    """
+
+    def test_resync_does_not_touch_manual_item(self, author, moderator, make_post):
+        from posts.models import Taxon
+        from posts.services.stats import resync_menu_item_taxons
+
+        post = make_post(author, item='Цзяньбин')
+        post.draft_dish_type = None
+        post.save(update_fields=['draft_dish_type'])
+        chinese = Taxon.objects.get(kind='cuisine', name='Китайская')
+        menu_item = approve_post(post, moderator, taxons=[chinese]).menu_item
+
+        assert menu_item.taxons_manual, 'одобрение должно пометить ручную правку'
+        assert resync_menu_item_taxons(menu_item) is False
+
+        menu_item.refresh_from_db()
+        assert set(menu_item.taxons.all()) == {chinese}
+
+    def test_untouched_item_still_catches_up(self, author, moderator, make_post, burger):
+        """Обычные позиции команда по-прежнему обновляет — иначе она бесполезна."""
+        from posts.services.stats import resync_menu_item_taxons
+
+        menu_item = approve_post(make_post(author), moderator).menu_item
+        assert not menu_item.taxons_manual
+        menu_item.taxons.clear()
+
+        assert resync_menu_item_taxons(menu_item) is True
+        assert set(menu_item.taxons.all()) == set(burger.default_taxons.all())
+
+    def test_resync_agrees_with_approval(self, author, moderator, make_post):
+        """
+        Пересчёт не должен подхватывать то, что одобрение отбросило.
+
+        Второй автор отмечает «веганское» у уже описанной позиции — одобрение
+        эту отметку игнорирует (овощная шаурма это отдельная позиция). Пересчёт
+        раньше её подхватывал, и набор зависел от того, гоняли команду или нет.
+        """
+        from posts.models import Taxon
+        from posts.services.stats import resync_menu_item_taxons
+
+        vegan = Taxon.objects.get(kind='type', slug='vegan')
+        menu_item = approve_post(make_post(author), moderator).menu_item
+        after_approval = set(menu_item.taxons.all())
+
+        second = make_post(author, menu_item=menu_item)
+        second.draft_taxons.set([vegan])
+        approve_post(second, moderator)
+
+        resync_menu_item_taxons(menu_item)
+        menu_item.refresh_from_db()
+        assert set(menu_item.taxons.all()) == after_approval
+
+    def test_preview_matches_what_happens(self, author, moderator, make_post, burger):
+        """--dry-run обещает ровно то, что потом и произойдёт."""
+        from posts.services.stats import planned_taxons, resync_menu_item_taxons
+
+        menu_item = approve_post(make_post(author), moderator).menu_item
+        menu_item.taxons.clear()
+
+        promised = planned_taxons(menu_item)
+        resync_menu_item_taxons(menu_item)
+        menu_item.refresh_from_db()
+
+        assert set(menu_item.taxons.all()) == promised
+
+
+@pytest.mark.django_db
+class TestAliasCanBeRetaught:
+    """
+    Модератор может переучить систему.
+
+    Синоним писался через get_or_create: первый урок оставался навсегда. Если
+    написание заучили неверно, отменить это было нечем, кроме правки в админке.
+    """
+
+    def test_second_correction_wins(self, moderator, burger):
+        from posts.models import DishType, DishTypeAlias
+        from posts.services.moderation import remember_dish_alias
+
+        other = DishType.objects.exclude(pk=burger.pk).first()
+        remember_dish_alias(burger, 'Загадочное нечто')
+        remember_dish_alias(other, 'Загадочное нечто')
+
+        alias = DishTypeAlias.objects.get(normalized_name='загадочное нечто')
+        assert alias.dish_type == other, 'побеждает последнее решение модератора'

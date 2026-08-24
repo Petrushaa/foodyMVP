@@ -13,11 +13,11 @@
 from django.core.management.base import BaseCommand
 
 from posts.models import MenuItem
-from posts.services.stats import resync_menu_item_taxons
+from posts.services.stats import planned_taxons
 
 
 class Command(BaseCommand):
-    help = 'Пересобирает категории позиций из блюда и отметок авторов.'
+    help = 'Пересобирает категории позиций по справочнику блюд.'
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -35,34 +35,21 @@ class Command(BaseCommand):
             queryset = queryset.filter(dish_type__name__iexact=options['dish'])
 
         changed = 0
+        skipped = 0
         for item in queryset:
             before = {t.name for t in item.taxons.all()}
+            wanted = planned_taxons(item)
 
-            if options['dry_run']:
-                # Считаем, но не сохраняем: показать разницу можно и так.
-                from posts.models import (
-                    AUTHOR_TAXON_SLUGS, MEAT_SLUGS, MEATLESS_SLUGS, Taxon,
-                )
-                from posts.services.stats import _visible_posts
+            # Ручная разметка модератора: догонять нечего, решение принято.
+            if wanted is None:
+                skipped += 1
+                continue
 
-                wanted = set(
-                    item.dish_type.default_taxons.all() if item.dish_type_id else []
-                ) | set(
-                    Taxon.objects.filter(
-                        draft_posts__in=_visible_posts(item),
-                        kind=Taxon.KIND_TYPE, slug__in=AUTHOR_TAXON_SLUGS,
-                    ).distinct()
-                )
-                if any(t.slug in MEATLESS_SLUGS for t in wanted):
-                    wanted = {t for t in wanted if t.slug not in MEAT_SLUGS}
-                after = {t.name for t in wanted}
-                if after == before:
-                    continue
-            else:
-                if not resync_menu_item_taxons(item):
-                    continue
-                item.refresh_from_db()
-                after = {t.name for t in item.taxons.all()}
+            after = {t.name for t in wanted}
+            if after == before:
+                continue
+            if not options['dry_run']:
+                item.taxons.set(wanted)
 
             changed += 1
             added = ', '.join(sorted(after - before)) or '—'
@@ -74,3 +61,7 @@ class Command(BaseCommand):
 
         prefix = 'Изменилось бы: ' if options['dry_run'] else 'Обновлено: '
         self.stdout.write(self.style.SUCCESS(f'{prefix}{changed} позиций'))
+        if skipped:
+            self.stdout.write(
+                f'Пропущено с ручной разметкой: {skipped} — их правил модератор.'
+            )

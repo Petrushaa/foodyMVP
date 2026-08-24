@@ -134,6 +134,11 @@ def remember_dish_alias(dish_type, name):
 
     Пишем название позиции целиком: именно его увидит система в следующий раз.
     Совпадающее с самим блюдом не пишем — там и так угадывается.
+
+    Перезаписываем, а не пропускаем: модератор, поправивший то же написание
+    во второй раз, тем самым отменяет первый урок. При get_or_create урок
+    оставался навсегда, и ошибочно заученное написание нельзя было переучить
+    ничем, кроме правки в админке.
     """
     from ..models import DishTypeAlias
 
@@ -141,7 +146,7 @@ def remember_dish_alias(dish_type, name):
     if not key or key == normalize_name(dish_type.name):
         return
 
-    DishTypeAlias.objects.get_or_create(
+    DishTypeAlias.objects.update_or_create(
         normalized_name=key, defaults={'dish_type': dish_type, 'name': name.strip()},
     )
 
@@ -216,6 +221,13 @@ def approve_post(post, moderator, *, menu_item=None, restaurant=None,
         # что когда-то проставили неверно. Автор менять её категории не может,
         # модератор может: иначе ошибку в каталоге нечем исправить.
         target.taxons.set(taxons)
+        # Метка для resync_taxons: догонять справочник тут нечего, решение
+        # принято руками. Без неё команда обслуживания молча стирала работу
+        # модератора — особенно на позициях без блюда, где наследовать не от
+        # чего и ручная разметка была единственной.
+        if not target.taxons_manual:
+            target.taxons_manual = True
+            target.save(update_fields=['taxons_manual'])
 
     post.menu_item = target
     post.status = Post.STATUS_APPROVED
