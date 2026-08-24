@@ -8,6 +8,7 @@
 
 from decimal import Decimal, InvalidOperation
 
+from django.db.models import F
 from django.shortcuts import get_object_or_404
 from rest_framework import permissions, viewsets
 from rest_framework.decorators import action
@@ -105,6 +106,9 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
 
     Фильтры по осям: `?cuisine=american&type=fastfood,vegan`.
     Значения — слаги категорий, можно перечислять через запятую.
+
+    Порядок: `?sort=rating|price|price_desc|reviews|new`. Без параметра —
+    по рейтингу, а в текстовом поиске по близости к запросу.
     """
 
     permission_classes = [permissions.AllowAny]
@@ -169,8 +173,43 @@ class MenuItemViewSet(viewsets.ReadOnlyModelViewSet):
         # что человеку и так показали бы, а не по всей базе.
         text = (self.request.query_params.get('search') or '').strip()
         if text:
-            return search_menu_items(text, queryset=queryset, limit=None)
-        return queryset
+            queryset = search_menu_items(text, queryset=queryset, limit=None)
+
+        return self._apply_sort(queryset)
+
+    # Порядок выдачи. Ключ — то, что приходит в `?sort=`.
+    #
+    # Цена может быть не заполнена, и позиции без неё всегда уходят в конец:
+    # в списке «сначала дешёвые» первыми должны стоять дешёвые, а не те, про
+    # чью цену мы ничего не знаем.
+    #
+    # Вторым ключом почти везде рейтинг: при равном числе отзывов или
+    # одинаковой цене выше должно стоять то, что людям понравилось больше.
+    # Последним всегда id — без него две одинаковые позиции могут меняться
+    # местами между страницами, и одна из них потеряется при листании.
+    SORTS = {
+        'rating': ('-rating', '-id'),
+        'price': (F('price').asc(nulls_last=True), '-rating', '-id'),
+        'price_desc': (F('price').desc(nulls_last=True), '-rating', '-id'),
+        'reviews': ('-ratings_count', '-rating', '-id'),
+        'new': ('-created_at', '-id'),
+    }
+
+    def _apply_sort(self, queryset):
+        """
+        Переупорядочивает выдачу по `?sort=`.
+
+        Без параметра порядок не трогаем — и это важнее всего для текстового
+        поиска: там свой порядок, по близости к запросу. Навязать туда рейтинг
+        значило бы поднять на «шаурма» мало похожее, но хорошо оценённое.
+        Сортировка включается только тем, кто её попросил.
+
+        Незнакомое значение игнорируем: мусор в адресной строке не должен
+        отдавать пустую страницу.
+        """
+        key = (self.request.query_params.get('sort') or '').strip()
+        order = self.SORTS.get(key)
+        return queryset.order_by(*order) if order else queryset
 
     def _apply_city(self, queryset):
         """

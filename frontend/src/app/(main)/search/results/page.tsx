@@ -4,6 +4,7 @@ import { GlassSurface } from "@/components/feed/glass-surface";
 import { SaveRecentSearchQuery } from "@/components/search/save-recent-search-query";
 import { MenuItemTile } from "@/components/catalog/menu-item-tile";
 import { SearchResultsHeader } from "@/components/search/search-results-header";
+import { SortControl } from "@/components/search/sort-control";
 import {
   getCuisineCategories,
   getDishCategories,
@@ -25,6 +26,7 @@ type SearchResultsPageProps = {
     dish_type?: string | string[];
     cuisine?: string | string[];
     type?: string | string[];
+    sort?: string | string[];
   }>;
 };
 
@@ -38,6 +40,7 @@ export default async function SearchResultsPage({
   const categoryId = getSingleSearchParam(params.category_id);
   const priceMin = getSingleSearchParam(params.price_min);
   const priceMax = getSingleSearchParam(params.price_max);
+  const sort = getSingleSearchParam(params.sort);
   // Категория из шапки: оси каталога идут слагами, «Блюда» — названием типа.
   const axes = {
     dish_type: getSingleSearchParam(params.dish_type),
@@ -67,6 +70,7 @@ export default async function SearchResultsPage({
   if (categoryId) qs.set("category_id", categoryId);
   if (priceMin) qs.set("price_min", priceMin);
   if (priceMax) qs.set("price_max", priceMax);
+  if (sort) qs.set("sort", sort);
   for (const [name, value] of Object.entries(axes)) {
     if (value) qs.set(name, value);
   }
@@ -98,6 +102,14 @@ export default async function SearchResultsPage({
           aria-label="Результаты поиска"
           className="hide-scroll flex-1 overflow-y-auto px-4 pt-2 pb-24"
         >
+          {/* Порядок показываем, только когда упорядочивать есть что: на одной
+              найденной позиции ряд кнопок — лишний шум. */}
+          {items.length > 1 && (
+            <div className="pb-2.5">
+              <SortControl hasQuery={Boolean(normalizedQuery)} />
+            </div>
+          )}
+
           {items.length > 0 ? (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {items.map((item) => (
