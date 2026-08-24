@@ -27,7 +27,6 @@ import { AnimatePresence, motion, useReducedMotion } from "motion/react";
 
 import { PhotoCropModal } from "@/components/review/photo-crop-modal";
 
-import { CategorySelectionScreen } from "@/components/categories/category-selection-screen";
 import { DietChips } from "@/components/review/diet-chips";
 import { GlassSurface } from "@/components/feed/glass-surface";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -43,7 +42,6 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { detectDishCategory, type FoodCategory } from "@/lib/categories";
 import type { Palette } from "@/lib/mock-data";
 import { cn } from "@/lib/utils";
 import {
@@ -505,46 +503,6 @@ function PhotoUpload({
   );
 }
 
-function CategoryButton({
-  category,
-  onClick,
-}: {
-  category: FoodCategory | null;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "flex h-[52px] w-full cursor-pointer items-center gap-3 rounded-[18px] border border-[rgba(20,40,28,0.08)] bg-white/70 px-4 text-left text-[#15291C] shadow-[0_4px_14px_rgba(20,40,28,0.06)]",
-        PRESS_CLASSES
-      )}
-    >
-      <span
-        aria-hidden="true"
-        className="grid size-8 place-items-center rounded-[10px] bg-white text-[17px] leading-none"
-        style={{
-          boxShadow: "0 4px 10px rgba(20,40,28,0.06), inset 0 0 0 1.5px #2ECC71",
-        }}
-      >
-        {category ? (
-          <span className="text-[17px] leading-none">{category.emoji}</span>
-        ) : (
-          <UtensilsCrossed size={17} strokeWidth={2.4} color="#15291C" />
-        )}
-      </span>
-      <span className="flex flex-1 items-center">
-        <span className="text-[16.5px] leading-snug font-bold tracking-[0px] text-[#15291C]">
-          {category ? category.label : "Выберите блюдо"}
-        </span>
-      </span>
-      <span className="ml-auto grid size-[26px] place-items-center rounded-full bg-[rgba(20,40,28,0.06)]">
-        <ChevronRight size={14} strokeWidth={2.4} color="#15291C" />
-      </span>
-    </button>
-  );
-}
 
 function TagsInput({
   brand,
@@ -654,16 +612,13 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
   const [rating, setRating] = useState(0);
   const [photos, setPhotos] = useState<File[]>([]);
   const [review, setReview] = useState("");
-  const [category, setCategory] = useState<FoodCategory | null>(null);
   // true — категорию выбрал юзер вручную (авто-распознавание больше не вмешивается).
-  const [categoryTouched, setCategoryTouched] = useState(false);
   const [tagDraft, setTagDraft] = useState("");
   // Особенности блюда: диета и острота. Только то, что знает съевший.
   const [dietIds, setDietIds] = useState<number[]>([]);
   const [tags, setTags] = useState<string[]>([]);
   const [showRequiredAlert, setShowRequiredAlert] = useState(false);
   const [showDraftDialog, setShowDraftDialog] = useState(false);
-  const [showCategoryPicker, setShowCategoryPicker] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const requiredAlertTimerRef = useRef<number | null>(null);
@@ -674,7 +629,6 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
     address.trim().length > 0 ||
     photos.length > 0 ||
     review.trim().length > 0 ||
-    category !== null ||
     tagDraft.trim().length > 0 ||
     tags.length > 0;
   const isPublishReady =
@@ -684,8 +638,7 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
     address.trim().length > 0 &&
     rating > 0 &&
     photos.length > 0 &&
-    review.trim().length > 0 &&
-    category !== null;
+    review.trim().length > 0;
 
   useEffect(() => {
     return () => {
@@ -695,15 +648,6 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
     };
   }, []);
 
-  // Авто-подстановка категории по названию блюда (с дебаунсом). Не трогаем,
-  // если юзер выбрал категорию вручную.
-  useEffect(() => {
-    if (categoryTouched) return;
-    const handle = window.setTimeout(() => {
-      setCategory(detectDishCategory(dish));
-    }, 300);
-    return () => window.clearTimeout(handle);
-  }, [dish, categoryTouched]);
 
   function leaveForm() {
     if (window.history.length > 1) {
@@ -797,23 +741,7 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
     }
   }
 
-  function handleSelectCategory(nextCategory: FoodCategory) {
-    setCategory(nextCategory);
-    setCategoryTouched(true);
-    setShowCategoryPicker(false);
-  }
 
-  if (showCategoryPicker) {
-    return (
-      <CategorySelectionScreen
-        brand={brand}
-        palette={palette}
-        source="review"
-        onBack={() => setShowCategoryPicker(false)}
-        onSelectCategory={handleSelectCategory}
-      />
-    );
-  }
 
   return (
     <ReviewScreen palette={palette}>
