@@ -15,6 +15,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/categories/category-icon";
+import { TaxonEditor } from "./TaxonEditor";
 import type { DishOption, PendingPost } from "./StaffPanel";
 
 /**
@@ -41,7 +42,10 @@ export function PostDetailSheet({
     error?: string;
     /** Справочник блюд: угаданное системой можно сменить. */
     dishOptions: DishOption[];
-    onApprove: (post: PendingPost, restaurantId?: number, dishTypeId?: number) => void;
+    onApprove: (
+        post: PendingPost, restaurantId?: number, dishTypeId?: number,
+        taxonIds?: number[],
+    ) => void;
     onReject: (post: PendingPost) => void;
     onClose: () => void;
 }) {
@@ -55,6 +59,17 @@ export function PostDetailSheet({
     // Отправляем блюдо, только если модератор его сменил: иначе одобрение
     // не должно трогать то, что уже стоит в заявке.
     const changedDish = dishId !== (guessed?.id ?? "") ? Number(dishId) : undefined;
+
+    // Категории позиции. Начинаем с того, что проставит одобрение само, —
+    // модератор правит уже готовый набор, а не собирает с нуля.
+    const initialTaxons = post.taxons.map((t) => t.id);
+    const [taxonIds, setTaxonIds] = useState<number[]>(initialTaxons);
+    // Отправляем, только если модератор что-то изменил: иначе одобрение
+    // считало бы наследование от блюда ручной правкой и запирало его.
+    const sameTaxons =
+        taxonIds.length === initialTaxons.length &&
+        taxonIds.every((id) => initialTaxons.includes(id));
+    const changedTaxons = sameTaxons ? undefined : taxonIds;
 
     // Escape закрывает разбор: экран во весь экран, и кнопка выхода может
     // уехать за пределы видимой области на длинном описании.
@@ -260,28 +275,12 @@ export function PostDetailSheet({
                             {post.size && <Row label="Порция" value={post.size} />}
                             {post.price && <Row label="Цена" value={post.price} />}
 
-                            {post.taxons.length > 0 && (
-                                <div className="flex flex-col gap-1.5">
-                                    <p className="text-[11.5px] font-medium text-[#8A958E]">
-                                        Категории
-                                    </p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {post.taxons.map((t) => (
-                                            <span
-                                                key={t.id}
-                                                className="inline-flex items-center gap-1.5 rounded-full bg-[#F1F5F2] px-2.5 py-1 text-[11.5px] font-semibold text-[#15291C]"
-                                            >
-                                                <CategoryIcon
-                                                    icon={t.icon}
-                                                    emoji={t.emoji}
-                                                    size={15}
-                                                />
-                                                {t.name}
-                                            </span>
-                                        ))}
-                                    </div>
-                                </div>
-                            )}
+                            <div className="flex flex-col gap-1.5">
+                                <p className="text-[11.5px] font-medium text-[#8A958E]">
+                                    Категории позиции
+                                </p>
+                                <TaxonEditor selected={taxonIds} onChange={setTaxonIds} />
+                            </div>
 
                             <div className="mt-1 border-t border-black/5 pt-2.5">
                                 <p className="flex items-center gap-1.5 text-[13px] font-semibold text-[#15291C]">
@@ -362,7 +361,7 @@ export function PostDetailSheet({
                                             variant="outline"
                                             className="shrink-0 text-xs"
                                             disabled={isPending}
-                                            onClick={() => onApprove(post, place.id, changedDish)}
+                                            onClick={() => onApprove(post, place.id, changedDish, changedTaxons)}
                                         >
                                             Привязать
                                         </Button>
@@ -393,7 +392,7 @@ export function PostDetailSheet({
                         type="button"
                         className="flex-1 gap-1.5 bg-[#1FA85C] text-white hover:bg-[#168B4A]"
                         disabled={isPending}
-                        onClick={() => onApprove(post, undefined, changedDish)}
+                        onClick={() => onApprove(post, undefined, changedDish, changedTaxons)}
                     >
                         {isPending ? (
                             <Loader2 className="size-4 animate-spin" />

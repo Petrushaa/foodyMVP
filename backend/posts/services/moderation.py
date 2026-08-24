@@ -165,7 +165,8 @@ def _apply_price_proposal(post, menu_item, accept):
 
 @transaction.atomic
 def approve_post(post, moderator, *, menu_item=None, restaurant=None,
-                 menu_item_name=None, dish_type=None, accept_price=True):
+                 menu_item_name=None, dish_type=None, taxons=None,
+                 accept_price=True):
     """
     Одобряет пост и заводит всё, чего не хватает в каталоге.
 
@@ -178,6 +179,10 @@ def approve_post(post, moderator, *, menu_item=None, restaurant=None,
     `dish_type` — поправленное блюдо. Автор его не выбирает: систему просят
     угадать по названию позиции, а модератор соглашается или меняет. Смена
     блюда меняет и категории — они наследуются от него.
+    `taxons` — категории, проставленные модератором вручную. Нужны там, где
+    блюдо не определилось: наследовать классификацию не от чего, и позиция без
+    них не попадёт ни в один раздел каталога. Заменяют набор целиком, включая
+    отметки автора: модератор видит их в панели и решает последним.
     `accept_price` — решение по предложенной цене.
     """
     if post.status == Post.STATUS_APPROVED:
@@ -204,6 +209,13 @@ def approve_post(post, moderator, *, menu_item=None, restaurant=None,
     elif menu_item_name:
         target.name = menu_item_name.strip()
         target.save(update_fields=['name', 'normalized_name'])
+
+    if taxons is not None:
+        # Ставим после создания позиции, а не вместо: на новой позиции это
+        # переписывает унаследованное от блюда, на существующей — чинит то,
+        # что когда-то проставили неверно. Автор менять её категории не может,
+        # модератор может: иначе ошибку в каталоге нечем исправить.
+        target.taxons.set(taxons)
 
     post.menu_item = target
     post.status = Post.STATUS_APPROVED

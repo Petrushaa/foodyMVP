@@ -657,6 +657,8 @@ class ModerationPostSerializer(serializers.ModelSerializer):
 
     def get_will_create(self, obj):
         """Что именно появится в каталоге. Модератор должен видеть это до одобрения."""
+        from .services.moderation import collect_taxons
+
         if obj.menu_item_id:
             return None
 
@@ -675,7 +677,14 @@ class ModerationPostSerializer(serializers.ModelSerializer):
             'menu_item': {
                 'name': obj.draft_menu_item_name,
                 'dish_type': str(obj.draft_dish_type) if obj.draft_dish_type_id else None,
-                'taxons': TaxonSerializer(obj.draft_taxons.all(), many=True).data,
+                # Не только отметки автора, а весь набор, который получит
+                # позиция: классификация от блюда плюс его свойства. Панель
+                # обещает показать, «что появится в каталоге» — значит должна
+                # показывать то же, что проставит одобрение.
+                'taxons': TaxonSerializer(
+                    sorted(collect_taxons(obj), key=lambda t: (t.kind, t.name)),
+                    many=True,
+                ).data,
                 'price': obj.proposed_price,
             },
         }
@@ -779,6 +788,15 @@ class ModerationDecisionSerializer(serializers.Serializer):
     dish_type_id = serializers.PrimaryKeyRelatedField(
         queryset=DishType.objects.all(), required=False, allow_null=True,
         help_text='Поправить блюдо, если система угадала неверно.',
+    )
+    taxon_ids = serializers.PrimaryKeyRelatedField(
+        queryset=Taxon.objects.all(), many=True, required=False,
+        help_text=(
+            'Проставить категории позиции вручную. Нужно там, где блюдо не '
+            'определилось: наследовать классификацию не от чего, и без этого '
+            'позиция не попадёт ни в один раздел каталога. Присланный набор '
+            'заменяет текущий целиком.'
+        ),
     )
     accept_price = serializers.BooleanField(
         default=True, help_text='Принять предложенную автором цену.',

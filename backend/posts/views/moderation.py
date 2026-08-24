@@ -71,7 +71,9 @@ class ModerationViewSet(viewsets.ReadOnlyModelViewSet):
 
         Модератор может привязать пост к существующей позиции (`menu_item_id`),
         поправить название (`menu_item_name`) и отдельно решить по цене
-        (`accept_price`) — пост можно одобрить, а цену не принять.
+        (`accept_price`) — пост можно одобрить, а цену не принять. Категории
+        позиции проставляются через `taxon_ids`: без них позиция с
+        неопределившимся блюдом не попадёт ни в один раздел каталога.
         """
         serializer = ModerationDecisionSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -85,6 +87,7 @@ class ModerationViewSet(viewsets.ReadOnlyModelViewSet):
                 restaurant=data.get('restaurant_id'),
                 menu_item_name=data.get('menu_item_name') or None,
                 dish_type=data.get('dish_type_id'),
+                taxons=data.get('taxon_ids'),
                 accept_price=data.get('accept_price', True),
             )
         except ModerationError as exc:

@@ -29,14 +29,19 @@ export async function approvePostClient(
     _accessToken?: string,
     restaurantId?: number,
     dishTypeId?: number,
+    taxonIds?: number[],
 ) {
     try {
         // restaurantId — модератор опознал место: блюдо заведётся в нём,
         // а не в новом заведении по написанию автора.
         // dishTypeId — система угадала блюдо неверно, модератор поправил.
-        const body: Record<string, number> = {};
+        // taxonIds — категории проставлены руками. Единственный способ вытащить
+        // из невидимости позицию, у которой блюдо не определилось: наследовать
+        // классификацию не от чего.
+        const body: Record<string, number | number[]> = {};
         if (restaurantId) body.restaurant_id = restaurantId;
         if (dishTypeId) body.dish_type_id = dishTypeId;
+        if (taxonIds) body.taxon_ids = taxonIds;
 
         await bePost(
             `/moderation/${postId}/approve`,

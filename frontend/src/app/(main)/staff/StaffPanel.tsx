@@ -106,6 +106,7 @@ export default function StaffPanel({
 
     async function handleApprove(
         post: PendingPost, restaurantId?: number, dishTypeId?: number,
+        taxonIds?: number[],
     ) {
         setPendingActionId(post.id);
         setErrorByPost((prev) => {
@@ -127,7 +128,7 @@ export default function StaffPanel({
                 return;
             }
             const result = await approvePostClient(
-                post.id, accessToken, restaurantId, dishTypeId,
+                post.id, accessToken, restaurantId, dishTypeId, taxonIds,
             );
             if ("error" in result && result.error) {
                 setErrorByPost((prev) => ({ ...prev, [post.id]: result.error! }));

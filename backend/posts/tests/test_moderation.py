@@ -240,3 +240,63 @@ class TestApproveIntoExistingRestaurant:
         first.refresh_from_db(); second.refresh_from_db()
         assert first.menu_item == second.menu_item, 'посты стакаются на одной позиции'
         assert second.menu_item.posts_count == 2
+
+
+@pytest.mark.django_db
+class TestModeratorSetsTaxons:
+    """
+    Модератор проставляет категории руками.
+
+    Нужно там, где блюдо не определилось: наследовать классификацию не от чего,
+    и без правки позиция не попадёт ни в один раздел каталога. Именно этот
+    тупик и закрывается — увидеть проблему в панели было можно, починить нет.
+    """
+
+    def test_taxons_applied_to_new_item(self, author, moderator, make_post):
+        from posts.models import Taxon
+
+        post = make_post(author, item='Цзяньбин')
+        post.draft_dish_type = None
+        post.save(update_fields=['draft_dish_type'])
+        chinese = Taxon.objects.get(kind='cuisine', name='Китайская')
+        street = Taxon.objects.filter(kind='type').first()
+
+        menu_item = approve_post(post, moderator, taxons=[chinese, street]).menu_item
+
+        assert set(menu_item.taxons.all()) == {chinese, street}
+
+    def test_dishless_item_is_findable_after_fix(self, api_client, author, moderator,
+                                                 make_post):
+        """Смысл правки: позиция перестаёт быть невидимой в каталоге."""
+        from posts.models import Taxon
+
+        post = make_post(author, item='Цзяньбин')
+        post.draft_dish_type = None
+        post.save(update_fields=['draft_dish_type'])
+        chinese = Taxon.objects.get(kind='cuisine', name='Китайская')
+
+        menu_item = approve_post(post, moderator, taxons=[chinese]).menu_item
+
+        response = api_client.get(f'/api/v1/menu-items/?category_id={chinese.id}')
+        assert response.data['count'] == 1
+        assert response.data['results'][0]['id'] == menu_item.id
+
+    def test_taxons_replace_existing_set(self, author, moderator, make_post, burger):
+        """Модератор — последняя инстанция: присланный набор заменяет прежний."""
+        from posts.models import Taxon
+
+        post = make_post(author)
+        right = Taxon.objects.get(kind='cuisine', name='Грузинская')
+
+        menu_item = approve_post(post, moderator, taxons=[right]).menu_item
+
+        assert set(menu_item.taxons.all()) == {right}, \
+            'унаследованное от блюда должно быть переписано, а не дополнено'
+
+    def test_without_taxons_nothing_changes(self, author, moderator, make_post, burger):
+        """Не прислали — не трогаем: обычное одобрение работает как прежде."""
+        post = make_post(author)
+
+        menu_item = approve_post(post, moderator).menu_item
+
+        assert set(menu_item.taxons.all()) >= set(burger.default_taxons.all())
