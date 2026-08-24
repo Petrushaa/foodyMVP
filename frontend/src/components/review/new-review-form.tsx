@@ -1069,6 +1069,16 @@ export function NewReviewForm({ brand, palette }: NewReviewFormProps) {
               </GlassSurface>
             </section>
 
+            <DietChips
+              selected={dietIds}
+              onToggle={(id) =>
+                setDietIds((current) =>
+                  current.includes(id)
+                    ? current.filter((x) => x !== id)
+                    : [...current, id]
+                )
+              }
+            />
             <TagsInput
               brand={brand}
               tags={tags}
