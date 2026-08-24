@@ -37,6 +37,19 @@ MIN_PRICE_CHANGE_RATIO = 0.05
 # Тег попадает в карточку позиции, когда его написали столько разных людей.
 MENU_ITEM_TAG_MIN_MENTIONS = 2
 
+# Виды, которые указывает автор поста: это факты о съеденном, а не разметка.
+# «Я ел вегетарианскую» — тут ошибиться трудно. Всё остальное («фастфуд это
+# или стритфуд») приходит от блюда, потому что там человек гадает, и каждый
+# гадает по-своему.
+AUTHOR_TAXON_SLUGS = (
+    'vegetarian', 'vegan', 'healthy', 'lenten', 'spicy',
+    'gluten-free', 'lactose-free', 'halal', 'kids',
+)
+# Диеты, при которых мясная метка снимается: веганская шаурма остаётся
+# шаурмой, но мясом уже не является.
+MEATLESS_SLUGS = ('vegan', 'vegetarian', 'lenten')
+MEAT_SLUGS = ('meat', 'chicken', 'fish', 'seafood')
+
 
 _PUNCTUATION_RE = re.compile(r'[^\w\s]', re.UNICODE)
 _WHITESPACE_RE = re.compile(r'\s+')

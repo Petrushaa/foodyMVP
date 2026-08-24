@@ -193,3 +193,46 @@ def recalculate_all_menu_item_stats(batch_size=500):
 
     logger.info('Пересчёт рейтингов позиций: обновлено %d', updated)
     return updated
+
+
+def resync_menu_item_taxons(menu_item):
+    """
+    Пересобирает категории позиции из справочника и отметок авторов.
+
+    Категории копируются в позицию при одобрении, а не берутся ссылкой: правка
+    справочника не должна задним числом переписывать тысячи готовых позиций.
+    Обратная сторона — позиция остаётся с той разметкой, что была на момент
+    одобрения. Пицца, одобренная до того, как блюду проставили «Фастфуд», так и
+    висит без него и выпадает из фильтра.
+
+    Эта функция — способ догнать справочник осознанно, командой, а не молчаливым
+    побочным эффектом чужой правки.
+
+    Возвращает True, если набор изменился.
+    """
+    from ..models import MEAT_SLUGS, MEATLESS_SLUGS, AUTHOR_TAXON_SLUGS, Taxon
+
+    from_dish = (
+        set(menu_item.dish_type.default_taxons.all())
+        if menu_item.dish_type_id else set()
+    )
+    # Отметки авторов берём из всех видимых постов позиции: диету указывает тот,
+    # кто ел, и терять её при пересчёте нельзя.
+    from_authors = set(
+        Taxon.objects.filter(
+            draft_posts__in=_visible_posts(menu_item),
+            kind=Taxon.KIND_TYPE,
+            slug__in=AUTHOR_TAXON_SLUGS,
+        ).distinct()
+    )
+
+    wanted = from_dish | from_authors
+    if any(t.slug in MEATLESS_SLUGS for t in from_authors):
+        wanted = {t for t in wanted if t.slug not in MEAT_SLUGS}
+
+    current = set(menu_item.taxons.all())
+    if current == wanted:
+        return False
+
+    menu_item.taxons.set(wanted)
+    return True

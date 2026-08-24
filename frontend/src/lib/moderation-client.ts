@@ -28,13 +28,19 @@ export async function approvePostClient(
     postId: number,
     _accessToken?: string,
     restaurantId?: number,
+    dishTypeId?: number,
 ) {
     try {
         // restaurantId — модератор опознал место: блюдо заведётся в нём,
         // а не в новом заведении по написанию автора.
+        // dishTypeId — система угадала блюдо неверно, модератор поправил.
+        const body: Record<string, number> = {};
+        if (restaurantId) body.restaurant_id = restaurantId;
+        if (dishTypeId) body.dish_type_id = dishTypeId;
+
         await bePost(
             `/moderation/${postId}/approve`,
-            restaurantId ? { restaurant_id: restaurantId } : undefined,
+            Object.keys(body).length ? body : undefined,
         );
         return { success: true as const };
     } catch (e: any) {

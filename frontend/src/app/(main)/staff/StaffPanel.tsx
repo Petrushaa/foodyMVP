@@ -76,11 +76,16 @@ export interface SimilarRestaurant {
     postsCount: number;
 }
 
+export type DishOption = { id: number; label: string; emoji: string };
+
 export default function StaffPanel({
     pendingPosts,
+    dishOptions,
     accessToken,
 }: {
     pendingPosts: PendingPost[];
+    /** Справочник блюд: угаданное системой модератор может сменить. */
+    dishOptions: DishOption[];
     accessToken: string;
 }) {
     const [posts, setPosts] = useState<PendingPost[]>(pendingPosts);
@@ -94,7 +99,9 @@ export default function StaffPanel({
 
     const detail = posts.find((p) => p.id === detailId) ?? null;
 
-    async function handleApprove(post: PendingPost, restaurantId?: number) {
+    async function handleApprove(
+        post: PendingPost, restaurantId?: number, dishTypeId?: number,
+    ) {
         setPendingActionId(post.id);
         setErrorByPost((prev) => {
             const next = { ...prev };
@@ -114,7 +121,9 @@ export default function StaffPanel({
                 }));
                 return;
             }
-            const result = await approvePostClient(post.id, accessToken, restaurantId);
+            const result = await approvePostClient(
+                post.id, accessToken, restaurantId, dishTypeId,
+            );
             if ("error" in result && result.error) {
                 setErrorByPost((prev) => ({ ...prev, [post.id]: result.error! }));
                 return;
@@ -369,6 +378,7 @@ export default function StaffPanel({
                     post={detail}
                     isPending={pendingActionId === detail.id}
                     error={errorByPost[detail.id]}
+                    dishOptions={dishOptions}
                     onApprove={handleApprove}
                     onReject={(post) => {
                         setRejectTarget(post);

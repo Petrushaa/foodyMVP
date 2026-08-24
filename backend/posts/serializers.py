@@ -22,6 +22,7 @@ from rest_framework import serializers
 
 from .models import (
     MAX_IMAGES_PER_POST, MAX_TAGS_PER_POST, MAX_POSTS_PER_DAY, MIN_PRICE_CHANGE_RATIO,
+    AUTHOR_TAXON_SLUGS,
     Comment, DishType, MenuItem, Post, PostImage, PostStatistics,
     PostTag, Restaurant, Tag, Taxon, normalize_name,
 )
@@ -218,16 +219,6 @@ class PostListSerializer(serializers.ModelSerializer):
 # ---------------------------------------------------------------------------
 # Создание поста
 # ---------------------------------------------------------------------------
-
-# Виды, которые указывает автор поста. Это факты о съеденном, а не
-# классификация: «я ел вегетарианскую» — тут ошибиться трудно. Всё остальное
-# («фастфуд это или стритфуд») приходит от блюда, потому что там человек
-# гадает, и каждый гадает по-своему.
-AUTHOR_TAXON_SLUGS = (
-    'vegetarian', 'vegan', 'healthy', 'lenten', 'spicy',
-    'gluten-free', 'lactose-free', 'halal', 'kids',
-)
-
 
 class PostCreateSerializer(serializers.ModelSerializer):
     """

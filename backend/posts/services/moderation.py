@@ -15,7 +15,9 @@ import logging
 from django.db import IntegrityError, transaction
 from django.utils import timezone
 
-from ..models import MenuItem, Post, Restaurant, normalize_name
+from ..models import (
+    MEAT_SLUGS, MEATLESS_SLUGS, MenuItem, Post, Restaurant, normalize_name,
+)
 from .restaurants import (
     get_or_create_restaurant, recalculate_restaurant_stats, remember_alias,
 )
@@ -90,10 +92,6 @@ def _menu_item_from_draft(post, restaurant, name=None):
     return menu_item, True
 
 
-# Диеты, при которых мясная метка снимается: веганская шаурма остаётся шаурмой,
-# но мясом уже не является.
-MEATLESS_SLUGS = ('vegan', 'vegetarian', 'lenten')
-MEAT_SLUGS = ('meat', 'chicken', 'fish', 'seafood')
 
 
 def collect_taxons(post):

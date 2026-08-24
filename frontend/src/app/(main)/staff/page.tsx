@@ -31,6 +31,25 @@ export default async function StaffPage() {
         redirect("/");
     }
 
+    // Справочник блюд: система угадывает блюдо по названию позиции, а
+    // модератор соглашается или меняет. Берём напрямую, а не через
+    // getDishCategories: тому для фронта хватает названия, а бэкенду при
+    // одобрении нужен числовой id.
+    let dishOptions: { id: number; label: string; emoji: string }[] = [];
+    try {
+        const raw = await apiRequest("/dish-types/", {
+            headers: { Authorization: `Bearer ${token}` },
+        });
+        const list: any[] = Array.isArray(raw) ? raw : (raw?.results ?? []);
+        dishOptions = list.map((d) => ({
+            id: d.id,
+            label: d.name,
+            emoji: d.emoji || "🍽️",
+        }));
+    } catch {
+        // Без справочника панель работает, просто блюдо не сменить.
+    }
+
     let pendingRaw: any[] = [];
     let totalCount = 0;
     try {
@@ -126,7 +145,7 @@ export default async function StaffPage() {
             {/* R10-BUG-2: пробрасываем токен в client-компонент чтобы он мог
                 звать Django API напрямую (минуя server actions, которые
                 ломались с 503 после rebuild). */}
-            <StaffPanel pendingPosts={pending} accessToken="authed" />
+            <StaffPanel pendingPosts={pending} dishOptions={dishOptions} accessToken="authed" />
         </main>
     );
 }

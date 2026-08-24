@@ -15,7 +15,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { CategoryIcon } from "@/components/categories/category-icon";
-import type { PendingPost } from "./StaffPanel";
+import type { DishOption, PendingPost } from "./StaffPanel";
 
 /**
  * Разбор поста перед решением.
@@ -31,6 +31,7 @@ export function PostDetailSheet({
     post,
     isPending,
     error,
+    dishOptions,
     onApprove,
     onReject,
     onClose,
@@ -38,12 +39,22 @@ export function PostDetailSheet({
     post: PendingPost;
     isPending: boolean;
     error?: string;
-    onApprove: (post: PendingPost, restaurantId?: number) => void;
+    /** Справочник блюд: угаданное системой можно сменить. */
+    dishOptions: DishOption[];
+    onApprove: (post: PendingPost, restaurantId?: number, dishTypeId?: number) => void;
     onReject: (post: PendingPost) => void;
     onClose: () => void;
 }) {
     const [shot, setShot] = useState(0);
     const photos = post.allImages;
+
+    // Блюдо, угаданное системой по названию позиции. Пусто — не угадалось,
+    // и это нормальный исход: у нишевой еды витрины нет.
+    const guessed = dishOptions.find((d) => d.label === post.dishType);
+    const [dishId, setDishId] = useState<number | "">(guessed?.id ?? "");
+    // Отправляем блюдо, только если модератор его сменил: иначе одобрение
+    // не должно трогать то, что уже стоит в заявке.
+    const changedDish = dishId !== (guessed?.id ?? "") ? Number(dishId) : undefined;
 
     // Escape закрывает разбор: экран во весь экран, и кнопка выхода может
     // уехать за пределы видимой области на длинном описании.
@@ -321,7 +332,7 @@ export function PostDetailSheet({
                                             variant="outline"
                                             className="shrink-0 text-xs"
                                             disabled={isPending}
-                                            onClick={() => onApprove(post, place.id)}
+                                            onClick={() => onApprove(post, place.id, changedDish)}
                                         >
                                             Привязать
                                         </Button>
@@ -352,7 +363,7 @@ export function PostDetailSheet({
                         type="button"
                         className="flex-1 gap-1.5 bg-[#1FA85C] text-white hover:bg-[#168B4A]"
                         disabled={isPending}
-                        onClick={() => onApprove(post)}
+                        onClick={() => onApprove(post, undefined, changedDish)}
                     >
                         {isPending ? (
                             <Loader2 className="size-4 animate-spin" />
