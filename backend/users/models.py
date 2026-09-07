@@ -2,7 +2,7 @@ import secrets
 
 from django.conf import settings
 from django.contrib.auth.hashers import check_password, make_password
-from django.db import models
+from django.db import models, transaction
 from django.contrib.auth.models import AbstractUser
 from django.utils import timezone
 
@@ -122,18 +122,35 @@ class EmailCode(models.Model):
 
         Возвращает True только один раз: верный код сразу помечается
         использованным, поэтому повторить тот же запрос уже не выйдет.
+
+        Счётчик попыток инкрементируется под `select_for_update`: без блокировки
+        параллельные запросы читают `attempts` до чужого коммита (lost update) и
+        лимит в EMAIL_CODE_MAX_ATTEMPTS можно превысить, перебирая код пачкой
+        одновременных запросов. Блокировка строки сериализует их.
         """
-        if self.is_spent:
-            return False
+        with transaction.atomic():
+            try:
+                locked = (
+                    EmailCode.objects.select_for_update().get(pk=self.pk)
+                )
+            except EmailCode.DoesNotExist:
+                return False
 
-        self.attempts += 1
-        if not check_password((raw_code or '').strip(), self.code_hash):
-            self.save(update_fields=['attempts'])
-            return False
+            if locked.is_spent:
+                return False
 
-        self.used_at = timezone.now()
-        self.save(update_fields=['attempts', 'used_at'])
-        return True
+            locked.attempts += 1
+            if not check_password((raw_code or '').strip(), locked.code_hash):
+                locked.save(update_fields=['attempts'])
+                self.attempts = locked.attempts
+                return False
+
+            locked.used_at = timezone.now()
+            locked.save(update_fields=['attempts', 'used_at'])
+            # Держим переданный экземпляр в актуальном состоянии для вызывающего.
+            self.attempts = locked.attempts
+            self.used_at = locked.used_at
+            return True
 
 
 class Follow(models.Model):
