@@ -12,14 +12,6 @@
         X-Frame-Options "DENY"
         Referrer-Policy "strict-origin-when-cross-origin"
         Permissions-Policy "geolocation=(self), camera=(), microphone=()"
-        # Content-Security-Policy — второй эшелон против XSS поверх React-escape
-        # и bleach на бэке. Жёстко закрыты векторы, которые сайту не нужны:
-        # object-src (плагины), base-uri (перехват относительных ссылок через
-        # <base>), form-action (угон отправки формы на чужой домен),
-        # frame-ancestors (кликджекинг, дублирует X-Frame-Options).
-        # script/img/connect намеренно широкие (https:) — под инлайны Next.js и
-        # домены Яндекс.Карт; сузить script-src до nonce — отдельная задача.
-        Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https:; style-src 'self' 'unsafe-inline' https:; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https:; frame-src 'self' https:; media-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'"
         # Скрываем x-powered-by из Next.js
         -X-Powered-By
         -Server
