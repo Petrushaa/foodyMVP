@@ -6,9 +6,12 @@ FROM base AS deps
 RUN apk add --no-cache libc6-compat
 WORKDIR /app
 
-# Install dependencies based on the preferred package manager
+# Install dependencies based on the preferred package manager.
+# npm ci — установка строго из lock-файла: воспроизводимо и не переписывает
+# lock на лету, в отличие от npm install. Тот же вызов, что и в CI (шаг Vitest),
+# — значит собранный образ совпадает по зависимостям с тем, где гонялись тесты.
 COPY package.json package-lock.json* ./
-RUN npm install --no-audit --no-fund --legacy-peer-deps
+RUN npm ci --no-audit --no-fund
 
 # Rebuild the source code only when needed
 FROM base AS builder
