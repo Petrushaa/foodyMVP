@@ -27,9 +27,18 @@ load_dotenv(BASE_DIR.parent / 'infra' / '.env')
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
-SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'change-me')
-
 DEBUG = bool(int(os.environ.get('DJANGO_DEBUG', '0')))
+
+SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY', 'change-me')
+# В проде дефолтный ключ недопустим: SECRET_KEY здесь же подписывает JWT
+# (SIMPLE_JWT без отдельного SIGNING_KEY), поэтому предсказуемый ключ = подделка
+# токенов на любого пользователя. Падаем сразу, а не втихую поднимаемся с ним.
+if not DEBUG and SECRET_KEY == 'change-me':
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        'DJANGO_SECRET_KEY не задан в проде (DJANGO_DEBUG=0). '
+        'Сгенерируйте случайный ключ и передайте его через окружение.'
+    )
 
 ALLOWED_HOSTS = os.environ.get('DJANGO_ALLOWED_HOSTS', '').split(',')
 
@@ -48,6 +57,9 @@ INSTALLED_APPS = [
 
     # Third party
     'rest_framework',
+    # Чёрный список refresh-токенов: нужен, чтобы logout и смена пароля
+    # действительно отзывали доступ, а не ждали истечения токена.
+    'rest_framework_simplejwt.token_blacklist',
     'django_filters',
     'corsheaders',
     'drf_spectacular',

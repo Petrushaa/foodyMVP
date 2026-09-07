@@ -7,6 +7,7 @@ from rest_framework.views import APIView
 from django.shortcuts import get_object_or_404
 from django.db.models import F
 from rest_framework.throttling import AnonRateThrottle
+from rest_framework_simplejwt.exceptions import TokenError
 from rest_framework_simplejwt.tokens import RefreshToken
 from .models import EmailCode, User, Follow
 from .serializers import (
@@ -45,6 +46,26 @@ class UserRegistrationView(generics.CreateAPIView):
 def _tokens_for(user):
     refresh = RefreshToken.for_user(user)
     return {'refresh': str(refresh), 'access': str(refresh.access_token)}
+
+
+def _revoke_all_tokens(user):
+    """
+    Гасит все выданные refresh-токены пользователя через чёрный список.
+
+    Вызывается на смене пароля: если аккаунт увели, смена пароля должна
+    выкидывать чужие сессии, а не оставлять действующий refresh на руках у
+    злоумышленника. Работает по токенам, выпущенным после установки
+    token_blacklist; уже выданные access-токены доживают свои минуты.
+    """
+    from rest_framework_simplejwt.token_blacklist.models import OutstandingToken
+    from rest_framework_simplejwt.tokens import RefreshToken as _RT
+
+    for outstanding in OutstandingToken.objects.filter(user=user):
+        try:
+            _RT(outstanding.token).blacklist()
+        except TokenError:
+            # Уже просрочен или погашен — гасить нечего.
+            continue
 
 
 def _find_user(email):
@@ -189,8 +210,37 @@ class PasswordResetConfirmView(APIView):
         # Если аккаунт заводили на чужой адрес и не подтвердили, теперь он ваш.
         user.email_verified = True
         user.save(update_fields=['password', 'email_verified'])
+        # Выкидываем все прежние сессии: смена пароля должна отзывать доступ у
+        # того, кто мог увести аккаунт. Новую пару токенов выдаём ниже.
+        _revoke_all_tokens(user)
         logger.info('Пароль сменён по коду из письма: пользователь %s', user.id)
         return Response(_tokens_for(user))
+
+
+class LogoutView(APIView):
+    """
+    Выход: гасит переданный refresh-токен через чёрный список.
+
+    Без этого refresh жил бы до своего срока, и им можно было бы выписывать
+    свежие access-токены даже после выхода. Уже выданный access-токен доживает
+    свои минуты — поэтому ACCESS_TOKEN_LIFETIME и держим коротким.
+    """
+
+    permission_classes = (IsAuthenticated,)
+
+    def post(self, request):
+        token = request.data.get('refresh')
+        if not token:
+            return Response(
+                {'detail': 'Не передан refresh-токен.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        try:
+            RefreshToken(token).blacklist()
+        except TokenError:
+            # Уже недействителен или погашен — для клиента это тот же выход.
+            pass
+        return Response(status=status.HTTP_205_RESET_CONTENT)
 
 
 class MeView(APIView):
