@@ -180,7 +180,9 @@ class PostViewSet(viewsets.ModelViewSet):
             queryset = queryset.filter(user_id=author)
 
         menu_item = params.get('menu_item')
-        if menu_item:
+        # Только числовой id: иначе Django пытается привести мусор из адресной
+        # строки к int для фильтра по PK и падает ValueError → 500.
+        if menu_item and menu_item.isdigit():
             queryset = queryset.filter(menu_item_id=menu_item)
 
         if params.get('ordering') == 'popular':
